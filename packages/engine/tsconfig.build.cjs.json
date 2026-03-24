@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "./dist-cjs",
+    "module": "CommonJS",
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false
+  },
+  "references": [
+    {
+      "path": "../shared/tsconfig.build.json"
+    }
+  ],
+  "include": [
+    "src/**/*"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "hanamikoji-mvp",
+  "version": "1.0.0",
+  "description": "花见小路在线对战游戏 MVP - 双人卡牌策略游戏",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "pnpm install && cd packages/server && pnpm install && cd ../client && pnpm install",
+    "dev": "concurrently \"pnpm run dev:server\" \"pnpm run dev:client\"",
+    "dev:server": "cd packages/server && pnpm run dev",
+    "dev:client": "cd packages/client && pnpm run dev",
+    "build": "pnpm run build:core && pnpm run build:client",
+    "build:server": "cd packages/server && pnpm run build",
+    "build:client": "cd packages/client && pnpm run build",
+    "start": "cd packages/server && pnpm run start",
+    "build:core": "pnpm -C packages/shared build && pnpm -C packages/engine build && pnpm -C packages/server build",
+    "build:shared": "cd packages/shared && pnpm run build",
+    "build:engine": "cd packages/engine && pnpm run build",
+    "test": "pnpm -C packages/engine test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "keywords": [
+    "game",
+    "card-game",
+    "hanamikoji",
+    "websocket",
+    "react",
+    "typescript"
+  ],
+  "author": "MiniMax Agent",
+  "license": "MIT"
+}

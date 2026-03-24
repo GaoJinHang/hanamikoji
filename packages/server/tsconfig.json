@@ -1,0 +1,40 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "module": "CommonJS",
+    "target": "ES2020",
+    "baseUrl": ".",
+    "paths": {
+      "@hanamikoji/shared": [
+        "../shared/src"
+      ],
+      "@hanamikoji/shared/*": [
+        "../shared/src/*"
+      ],
+      "@hanamikoji/engine": [
+        "../engine/src"
+      ],
+      "@hanamikoji/engine/*": [
+        "../engine/src/*"
+      ]
+    },
+    "noEmit": false
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.json"
+    },
+    {
+      "path": "../engine/tsconfig.json"
+    }
+  ]
+}

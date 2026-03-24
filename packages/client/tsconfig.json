@@ -1,0 +1,48 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ],
+      "@shared/*": [
+        "../shared/src/*"
+      ],
+      "@hanamikoji/shared": [
+        "../shared/src/index.ts"
+      ],
+      "@hanamikoji/shared/*": [
+        "../shared/src/*"
+      ],
+      "@hanamikoji/engine": [
+        "../engine/dist/index.d.ts"
+      ],
+      "@hanamikoji/engine/*": [
+        "../engine/dist/*"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "vite.config.ts",
+    "../shared/src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

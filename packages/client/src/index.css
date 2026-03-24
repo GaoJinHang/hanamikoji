@@ -1,0 +1,175 @@
+/**
+ * 花见小路 - 全局样式
+ * 使用 Tailwind CSS 进行样式管理
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义工具类 */
+@layer utilities {
+  /* 艺伎主题色 */
+  .bg-geisha-sakura { background-color: #FFB6C1; }
+  .bg-geisha-ume { background-color: #DDA0DD; }
+  .bg-geisha-ran { background-color: #87CEEB; }
+  .bg-geisha-take { background-color: #90EE90; }
+  .bg-geisha-kiku { background-color: #FFA500; }
+  .bg-geisha-bara { background-color: #FF6347; }
+  .bg-geisha-yuri { background-color: #FFD700; }
+
+  .text-geisha-sakura { color: #FFB6C1; }
+  .text-geisha-ume { color: #DDA0DD; }
+  .text-geisha-ran { color: #87CEEB; }
+  .text-geisha-take { color: #90EE90; }
+  .text-geisha-kiku { color: #FFA500; }
+  .text-geisha-bara { color: #FF6347; }
+  .text-geisha-yuri { color: #FFD700; }
+
+  /* 行动主题色 */
+  .bg-action-secret { background-color: #3B82F6; }
+  .bg-action-discard { background-color: #6B7280; }
+  .bg-action-gift { background-color: #10B981; }
+  .bg-action-competition { background-color: #EF4444; }
+
+  /* 触摸优化 */
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 禁用选择 */
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* 基础样式重置 */
+body {
+  @apply bg-game-bg text-game-text;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* 卡牌通用样式 */
+.card-base {
+  @apply rounded-lg shadow-md transition-all duration-200;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card-base:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-base.selected {
+  @apply ring-2 ring-game-primary ring-offset-2;
+  transform: translateY(-4px);
+}
+
+/* 按钮通用样式 */
+.btn-primary {
+  @apply px-6 py-3 bg-game-primary text-white rounded-xl font-medium;
+  @apply active:scale-95 transition-transform duration-150;
+  @apply touch-manipulation no-select;
+}
+
+.btn-secondary {
+  @apply px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium;
+  @apply active:scale-95 transition-transform duration-150;
+  @apply touch-manipulation no-select;
+}
+
+.btn-disabled {
+  @apply px-6 py-3 bg-gray-300 text-gray-500 rounded-xl font-medium cursor-not-allowed;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  @apply bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 艺伎卡片样式 */
+.geisha-card {
+  @apply relative rounded-xl overflow-hidden;
+  aspect-ratio: 3/4;
+}
+
+.geisha-card .geisha-image {
+  @apply absolute inset-0 flex items-center justify-center;
+  font-size: 2rem;
+}
+
+.geisha-card .geisha-info {
+  @apply absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent;
+}
+
+/* 物品卡样式 */
+.item-card {
+  @apply relative rounded-lg overflow-hidden;
+  aspect-ratio: 2/3;
+}
+
+.item-card .item-icon {
+  @apply absolute inset-0 flex items-center justify-center text-2xl;
+}
+
+/* 选中状态 */
+.selected-item {
+  @apply ring-2 ring-game-primary ring-offset-1;
+  transform: translateY(-8px);
+}
+
+/* 禁用状态 */
+.disabled-action {
+  @apply opacity-50 cursor-not-allowed;
+  filter: grayscale(50%);
+}
+
+/* 胜利/失败状态 */
+.winner-badge {
+  @apply absolute -top-2 -right-2 w-8 h-8 bg-game-primary rounded-full;
+  @apply flex items-center justify-center text-white text-sm font-bold;
+  animation: bounce 0.5s ease-out;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../hooks';
-import { GameState as GameStateType, ActionType, PlayerId, ItemCard } from '@hanamikoji/shared';
+import { GameState as GameStateType, ActionType, PlayerId, ItemCard, CompetitionPending } from '@hanamikoji/shared';
 import { ACTION_CONFIG, ITEM_CARDS, getCharmFromCardId } from '@hanamikoji/engine';
 import { Header } from '../components/layout/Header';
 import { GeishaGrid } from '../components/geisha/GeishaGrid';
@@ -228,7 +228,7 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
     ? (gameState.pendingAction?.cardDetails || [])
     : getCardDetails(selectedCards);
   const competitionGrouping: string[][] = isPendingCompetition
-    ? (gameState.pendingAction?.cards || [])
+    ? ((gameState.pendingAction as CompetitionPending)?.cards || [])
     : [];
   // 发起者在本地只会自己打开竞争分组弹窗，因此在没有 pendingAction 时可以认为当前玩家是发起者
   const competitionIsInitiator =

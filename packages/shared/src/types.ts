@@ -126,23 +126,49 @@ export interface PlayerStateMap {
 // 游戏状态类型
 // ============================================
 
+// ============================================
+// 待处理行动类型（判别联合）
+// ============================================
+
 export interface GiftPending {
-  type: 'gift';
-  initiator: PlayerId;
-  chooser: PlayerId;
-  cards: string[];
-  cardDetails: ItemCard[];
+  readonly type: 'gift';
+  readonly initiator: PlayerId;
+  readonly chooser: PlayerId;
+  readonly cards: string[];
+  readonly cardDetails: ItemCard[];
 }
 
 export interface CompetitionPending {
-  type: 'competition';
-  initiator: PlayerId;
-  chooser: PlayerId;
-  cards: string[][];
-  cardDetails: ItemCard[];
+  readonly type: 'competition';
+  readonly initiator: PlayerId;
+  readonly chooser: PlayerId;
+  readonly cards: string[][];
+  readonly cardDetails: ItemCard[];
 }
 
 export type PendingAction = GiftPending | CompetitionPending;
+
+// 类型守卫函数，用于安全的类型缩小
+/** 检查是否为赠予行动 */
+export function isGiftAction(action: PendingAction): action is GiftPending {
+  return action.type === 'gift';
+}
+
+/** 检查是否为竞争行动 */
+export function isCompetitionAction(action: PendingAction): action is CompetitionPending {
+  return action.type === 'competition';
+}
+
+// 类型安全的访问器函数
+/** 安全获取赠予行动的卡牌列表 */
+export function getGiftCards(action: PendingAction): string[] | null {
+  return isGiftAction(action) ? action.cards : null;
+}
+
+/** 安全获取竞争行动的卡牌分组 */
+export function getCompetitionCards(action: PendingAction): string[][] | null {
+  return isCompetitionAction(action) ? action.cards : null;
+}
 
 export interface GameState {
   roomId: string;

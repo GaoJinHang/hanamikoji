@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../hooks';
-import { GameState as GameStateType, ActionType, PlayerId, ItemCard, CompetitionPending, isCompetitionAction, isGiftAction, PendingAction } from '@hanamikoji/shared';
+import { GameState as GameStateType, ActionType, PlayerId, ItemCard, PendingAction } from '@hanamikoji/shared';
 import { ACTION_CONFIG, ITEM_CARDS, getCharmFromCardId } from '@hanamikoji/engine';
 import { Header } from '../components/layout/Header';
 import { GeishaGrid } from '../components/geisha/GeishaGrid';
@@ -27,7 +27,7 @@ interface GameProps {
  */
 function getCardDetails(cardIds: string[]): ItemCard[] {
   return cardIds
-    .map(id => ITEM_CARDS.find(c => c.id === id))
+    .map(id => ITEM_CARDS.find((c: ItemCard) => c.id === id))
     .filter((c): c is ItemCard => c !== undefined);
 }
 
@@ -77,9 +77,9 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
         return;
       }
 
-      if (isGiftAction(pendingAction)) {
+      if (pendingAction.type === 'gift') {
         setShowGift(true);
-      } else if (isCompetitionAction(pendingAction)) {
+      } else if (pendingAction.type === 'competition') {
         setShowCompetition(true);
       }
     };
@@ -223,21 +223,18 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   // 竞争模态框所需的数据：
   // - 发起者本地分组阶段：使用当前选中的4张手牌
   // - 选择者服务器广播阶段：使用 pendingAction 中的数据
-  const competitionAction = gameState.pendingAction && isCompetitionAction(gameState.pendingAction) ? gameState.pendingAction : null;
-  const isPendingCompetition = !!competitionAction;
-  const competitionCardDetails: ItemCard[] = competitionAction
-    ? (competitionAction.cardDetails || [])
+  const competitionCardDetails: ItemCard[] = gameState.pendingAction?.type === 'competition'
+    ? (gameState.pendingAction.cardDetails || [])
     : getCardDetails(selectedCards);
-  const competitionGrouping: string[][] = competitionAction
-    ? (competitionAction.cards || [])
+  const competitionGrouping: string[][] = gameState.pendingAction?.type === 'competition'
+    ? gameState.pendingAction.cards
     : [];
   // 发起者在本地只会自己打开竞争分组弹窗，因此在没有 pendingAction 时可以认为当前玩家是发起者
-  const competitionIsInitiator = competitionAction
-    ? competitionAction.initiator === playerId
+  const competitionIsInitiator = gameState.pendingAction?.type === 'competition'
+    ? gameState.pendingAction.initiator === playerId
     : true;
 
   // 赠予行动的类型安全访问
-  const giftAction = gameState.pendingAction && isGiftAction(gameState.pendingAction) ? gameState.pendingAction : null;
 
   return (
     <div className="h-screen flex flex-col bg-game-bg overflow-hidden">
@@ -295,9 +292,9 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
       {/* 赠予选择模态框 */}
       <GiftModal 
         isOpen={showGift}
-        cardDetails={giftAction?.cardDetails || []}
+        cardDetails={gameState.pendingAction?.type === 'gift' ? gameState.pendingAction.cardDetails || [] : []}
         onSelect={handleGiftComplete}
-        isInitiator={giftAction?.initiator === playerId}
+        isInitiator={gameState.pendingAction?.type === 'gift' ? gameState.pendingAction.initiator === playerId : false}
         opponentName={opponentPlayer.name}
       />
 

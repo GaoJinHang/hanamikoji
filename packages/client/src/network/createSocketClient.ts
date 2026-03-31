@@ -20,21 +20,14 @@ function randomClientId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function getWebSocketUrl(url?: string): string {
-  if (url) return url;
-  if (import.meta.env.VITE_SOCKET_URL) {
-    return import.meta.env.VITE_SOCKET_URL;
-  }
-  if (typeof window === 'undefined') {
-    return 'ws://localhost:3001/ws';
-  }
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = import.meta.env.PROD ? window.location.host : 'localhost:3001';
-  return `${protocol}//${host}/ws`;
-}
-
 export function createSocketClient(url?: string): SocketClient {
-  const wsUrl = getWebSocketUrl(url);
+  // 根据主机名动态选择 WebSocket 连接地址
+  const wsUrl = url || (typeof window !== 'undefined' 
+    ? (window.location.hostname === "localhost" 
+        ? "ws://localhost:8787" 
+        : "wss://hanamikoji-server.g404338082.workers.dev")
+    : "ws://localhost:8787");
+  
   const clientId = randomClientId();
   const listeners = new Map<string, Set<EventHandler>>();
   let connected = false;

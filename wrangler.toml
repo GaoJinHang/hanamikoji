@@ -1,0 +1,7 @@
+name = "hanamikoji-server"
+main = "packages/server/src/worker/worker.ts"
+compatibility_date = "2024-01-01"
+
+# 如果你用的是 TypeScript（推荐）
+[build]
+command = "pnpm build"

@@ -1,0 +1,25 @@
+{
+  "name": "hanamikoji-server",
+  "version": "1.0.0",
+  "description": "花见小路 - Cloudflare Workers Durable Object 服务器",
+  "type": "module",
+  "main": "src/worker.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "echo 'No build step needed for TypeScript'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hanamikoji/engine": "workspace:*",
+    "@hanamikoji/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250221.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

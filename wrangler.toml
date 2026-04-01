@@ -1,7 +1,25 @@
 name = "hanamikoji-server"
-main = "packages/server/src/worker/worker.ts"
-compatibility_date = "2024-01-01"
+main = "apps/server/src/worker.ts"
+compatibility_date = "2026-03-31"
 
-# 如果你用的是 TypeScript（推荐）
+[durable_objects]
+bindings = [
+  { name = "GAME_ROOM", class_name = "GameRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GameRoom"]
+
+# 构建配置
 [build]
 command = "pnpm build"
+
+# 开发配置
+[dev]
+port = 8787
+local_protocol = "http"
+
+# 环境变量（如果需要）
+[env.production.vars]
+NODE_ENV = "production"

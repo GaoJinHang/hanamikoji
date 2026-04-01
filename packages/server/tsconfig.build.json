@@ -4,7 +4,8 @@
     "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "CommonJS"
+    "module": "CommonJS",
+    "skipLibCheck": true
   },
   "references": [
     {
@@ -16,5 +17,8 @@
   ],
   "include": [
     "src/**/*"
+  ],
+  "exclude": [
+    "src/worker/**/*"
   ]
 }

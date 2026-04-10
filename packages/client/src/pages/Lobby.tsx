@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useSocket } from '../hooks';
-import { JoinRoomResponse, RoomPlayer, GameState } from '@hanamikoji/shared';
+import type { RoomPlayer, GameState } from '@hanamikoji/shared';
 
 interface LobbyProps {
   onGameStart: (state: GameState, playerId: 'p1' | 'p2', roomId: string) => void;
@@ -15,48 +15,58 @@ interface LobbyProps {
 
 export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPlayerId }) => {
   const socket = useSocket();
-  const [playerName, setPlayerName] = useState(savedPlayerId ? (savedPlayerId === 'p1' ? '玩家1' : '玩家2') : '');
+  const [playerName, setPlayerName] = useState(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.sessionStorage.getItem('hanamikoji_playerName') || (savedPlayerId === 'p1' ? '玩家1' : savedPlayerId === 'p2' ? '玩家2' : '');
+  });
   const [roomCode, setRoomCode] = useState(savedRoomId || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 处理加入房间
   const handleJoinRoom = useCallback((existingRoomId: string | null) => {
     if (!socket) {
       setError('正在连接服务器，请稍候...');
       return;
     }
-    
-    if (!playerName.trim()) {
+
+    const trimmedName = playerName.trim();
+    if (!trimmedName) {
       setError('请输入您的名称');
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    socket.emit('joinRoom', existingRoomId, trimmedName);
+  }, [playerName, socket]);
 
-    socket.emit('joinRoom', existingRoomId, playerName.trim(), (response: JoinRoomResponse) => {
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const handleRoomJoined = (payload: { success: boolean; roomId?: string; message?: string }) => {
       setIsLoading(false);
 
-      if (response.success && response.roomId) {
-        console.log('加入房间成功:', response.roomId);
-        setRoomCode(response.roomId);
-        setIsWaiting(true);
-        setStatus(`已加入房间 ${response.roomId}，等待对手加入...`);
-      } else {
-        setError(response.message || '加入房间失败');
+      if (!payload?.success || !payload.roomId) {
+        setError(payload?.message || '加入房间失败');
+        setIsWaiting(false);
+        setStatus(null);
+        return;
       }
-    });
-  }, [socket, playerName]);
 
-  // 监听玩家加入事件
-  useEffect(() => {
-    if (!socket) return;
+      window.sessionStorage.setItem('hanamikoji_roomId', payload.roomId);
+      window.sessionStorage.setItem('hanamikoji_playerName', playerName.trim());
+      setRoomCode(payload.roomId);
+      setIsWaiting(true);
+      setStatus(`已加入房间 ${payload.roomId}，等待对手加入...`);
+    };
 
     const handlePlayerJoined = (player: RoomPlayer) => {
-      console.log('玩家加入:', player);
       setStatus(`玩家 ${player.name} 已加入，游戏即将开始...`);
     };
 
@@ -73,23 +83,32 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
+    const handleConnectError = () => {
+      setIsLoading(false);
+      setIsWaiting(false);
+      setStatus(null);
+      setError('无法连接游戏服务器，请检查 Worker 地址与 WebSocket /ws 路径配置');
+    };
+
+    socket.on('roomJoined', handleRoomJoined);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('gameStarted', handleGameStarted);
     socket.on('error', handleError);
+    socket.on('connect_error', handleConnectError);
 
     return () => {
+      socket.off('roomJoined', handleRoomJoined);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('gameStarted', handleGameStarted);
       socket.off('error', handleError);
+      socket.off('connect_error', handleConnectError);
     };
-  }, [socket, playerName, onGameStart]);
+  }, [onGameStart, playerName, socket]);
 
-  // 创建新房间
   const handleCreateRoom = () => {
     handleJoinRoom(null);
   };
 
-  // 加入指定房间
   const handleJoinExistingRoom = () => {
     if (!roomCode.trim()) {
       setError('请输入房间号');
@@ -101,19 +120,14 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
   return (
     <div className="min-h-screen bg-game-bg flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* 标题 */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-serif text-game-primary mb-2">花见小路</h1>
           <p className="text-gray-500">双人在线卡牌对战</p>
         </div>
 
-        {/* 输入区域 */}
         <div className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
-          {/* 玩家名称 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              您的名称
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">您的名称</label>
             <input
               type="text"
               value={playerName}
@@ -125,11 +139,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
             />
           </div>
 
-          {/* 房间号（可选） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              房间号（可选）
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">房间号（可选）</label>
             <input
               type="text"
               value={roomCode}
@@ -137,18 +148,14 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
               placeholder="输入房间号加入现有房间"
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none transition-all uppercase"
               disabled={isLoading || isWaiting}
-              maxLength={6}
+              maxLength={8}
             />
           </div>
 
-          {/* 错误提示 */}
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-              {error}
-            </div>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>
           )}
 
-          {/* 房间与等待状态 */}
           {roomCode.trim() && status && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
               <div className="font-medium">房间号：<span className="font-mono">{roomCode}</span></div>
@@ -161,7 +168,6 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
             </div>
           )}
 
-          {/* 按钮组 */}
           <div className="space-y-3 pt-4">
             <button
               onClick={handleCreateRoom}
@@ -191,7 +197,6 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
           </div>
         </div>
 
-        {/* 游戏规则简介 */}
         <div className="mt-8 bg-white/50 rounded-xl p-4 text-sm text-gray-600">
           <h3 className="font-medium text-gray-800 mb-2">游戏规则</h3>
           <ul className="space-y-1">
@@ -202,9 +207,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
           </ul>
         </div>
 
-        {/* 连接状态 */}
         <div className="mt-4 text-center text-xs text-gray-400">
-          服务器连接中...
+          {socket?.connected ? '服务器已连接' : '未连接时将在加入房间时自动建立连接'}
         </div>
       </div>
     </div>

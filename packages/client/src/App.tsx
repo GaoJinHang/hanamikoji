@@ -3,87 +3,78 @@
  * 根据游戏状态显示不同的页面
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SocketProvider } from './context/SocketContext';
+import { useSocket } from './hooks';
 import { Lobby } from './pages/Lobby';
 import { Game } from './pages/Game';
-import { GameState, RoomPlayer } from '@hanamikoji/shared';
+import type { GameState } from '@hanamikoji/shared';
 
 function AppContent() {
+  const socket = useSocket();
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [playerId, setPlayerId] = useState<'p1' | 'p2' | null>(null);
-  const [roomId, setRoomId] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<'p1' | 'p2' | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return (window.sessionStorage.getItem('hanamikoji_playerId') as 'p1' | 'p2' | null) ?? null;
+  });
+  const [roomId, setRoomId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.sessionStorage.getItem('hanamikoji_roomId');
+  });
 
   useEffect(() => {
-    // 监听游戏开始事件
-    const handleGameStarted = (payload: { state: GameState; playerId: 'p1' | 'p2'; roomId: string }) => {
-      handleGameStart(payload.state, payload.playerId, payload.roomId);
+    if (!socket) {
+      return;
+    }
+
+    const handleGameStarted = (state: GameState, pid: 'p1' | 'p2') => {
+      setGameState(state);
+      setPlayerId(pid);
+      setRoomId(state.roomId);
+      window.sessionStorage.setItem('hanamikoji_roomId', state.roomId);
+      window.sessionStorage.setItem('hanamikoji_playerId', pid);
     };
 
-    // 监听游戏状态更新
-    const handleGameStateUpdate = (state: GameState) => {
+    const handleStateSync = (state: GameState) => {
       setGameState(state);
     };
 
-    // 监听游戏结束
     const handleGameOver = () => {
       setGameState(null);
       setPlayerId(null);
       setRoomId(null);
+      window.sessionStorage.removeItem('hanamikoji_roomId');
+      window.sessionStorage.removeItem('hanamikoji_playerId');
     };
 
-    // 从 localStorage 恢复游戏状态
-    const savedRoomId = localStorage.getItem('hanamikoji_roomId');
-    const savedPlayerId = localStorage.getItem('hanamikoji_playerId') as 'p1' | 'p2' | null;
-    
-    if (savedRoomId && savedPlayerId) {
-      setRoomId(savedRoomId);
-      setPlayerId(savedPlayerId);
-    }
-
-    // 添加事件监听器（通过 window 事件总线实现组件间通信）
-    window.addEventListener('hanamikoji_gameStarted', ((e: CustomEvent) => {
-      handleGameStarted(e.detail);
-    }) as EventListener);
-    
-    window.addEventListener('hanamikoji_gameStateUpdate', ((e: CustomEvent) => {
-      handleGameStateUpdate(e.detail);
-    }) as EventListener);
-    
-    window.addEventListener('hanamikoji_gameOver', (() => {
-      handleGameOver();
-    }) as EventListener);
+    socket.on('gameStarted', handleGameStarted);
+    socket.on('stateSync', handleStateSync);
+    socket.on('gameOver', handleGameOver);
 
     return () => {
-      window.removeEventListener('hanamikoji_gameStarted', (handleGameStarted as any));
-      window.removeEventListener('hanamikoji_gameStateUpdate', (handleGameStateUpdate as any));
-      window.removeEventListener('hanamikoji_gameOver', handleGameOver);
+      socket.off('gameStarted', handleGameStarted);
+      socket.off('stateSync', handleStateSync);
+      socket.off('gameOver', handleGameOver);
     };
-  }, []);
-
-  const handleGameStart = (state: GameState, pid: 'p1' | 'p2', rid: string) => {
-    setGameState(state);
-    setPlayerId(pid);
-    setRoomId(rid);
-    localStorage.setItem('hanamikoji_roomId', rid);
-    localStorage.setItem('hanamikoji_playerId', pid);
-  };
+  }, [socket]);
 
   const handleLeaveGame = () => {
     setGameState(null);
     setPlayerId(null);
     setRoomId(null);
-    localStorage.removeItem('hanamikoji_roomId');
-    localStorage.removeItem('hanamikoji_playerId');
+    window.sessionStorage.removeItem('hanamikoji_roomId');
+    window.sessionStorage.removeItem('hanamikoji_playerId');
   };
 
-  // 如果有游戏状态，显示游戏页面
-  if (gameState) {
-    return <Game gameState={gameState} playerId={playerId!} onLeave={handleLeaveGame} />;
+  if (gameState && playerId) {
+    return <Game gameState={gameState} playerId={playerId} onLeave={handleLeaveGame} />;
   }
 
-  // 否则显示大厅页面
-  return <Lobby onGameStart={handleGameStart} savedRoomId={roomId} savedPlayerId={playerId} />;
+  return <Lobby onGameStart={() => {}} savedRoomId={roomId} savedPlayerId={playerId} />;
 }
 
 function App() {

@@ -34,6 +34,15 @@ function getCardDetails(cardIds: string[]): ItemCard[] {
 export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   const socket = useSocket();
   
+  // 检查 gameState 是否更新
+  React.useEffect(() => {
+    console.log('🎮 Game 组件: gameState 已更新');
+    console.log('   玩家 p1 手牌数量:', gameState.players.p1.hand.length);
+    console.log('   玩家 p2 手牌数量:', gameState.players.p2.hand.length);
+    console.log('   当前阶段:', gameState.phase);
+    console.log('   当前玩家:', gameState.activePlayer);
+  }, [gameState]);
+  
   // 当前玩家状态
   const currentPlayer = gameState.players[playerId];
   const opponentPlayer = gameState.players[playerId === 'p1' ? 'p2' : 'p1'];
@@ -218,7 +227,10 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   };
 
   // 获取卡牌详情
-  const handCards = getCardDetails(currentPlayer.hand);
+  // 计算手牌详情
+  const handCards = React.useMemo(() => {
+    return getCardDetails(currentPlayer.hand);
+  }, [currentPlayer.hand]);
 
   // 竞争模态框所需的数据：
   // - 发起者本地分组阶段：使用当前选中的4张手牌

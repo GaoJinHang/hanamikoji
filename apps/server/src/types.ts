@@ -63,6 +63,7 @@ export interface PlayerConnection {
   socket: WebSocket;
   playerId: PlayerId;
   connected: boolean;
+  joined: boolean;
   clientPlayerId: string;
   name: string;
 }

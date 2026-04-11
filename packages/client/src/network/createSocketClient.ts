@@ -1,9 +1,9 @@
 import type { ClientToServerEvents, ServerToClientEvents } from '@hanamikoji/shared';
 
-type EventName = Extract<keyof ServerToClientEvents, string> | 'connect' | 'disconnect' | 'connect_error' | 'roomJoined' | 'stateSync';
+type EventName = keyof ServerToClientEvents | 'connect' | 'disconnect' | 'connect_error' | 'roomJoined' | 'stateSync';
 type EventHandler = (...args: any[]) => void;
 
-type OutgoingEvent = Extract<keyof ClientToServerEvents, string> | 'leaveRoom' | 'ping';
+type OutgoingEvent = keyof ClientToServerEvents | 'leaveRoom' | 'ping';
 
 type QueuedMessage = {
   type: OutgoingEvent;
@@ -42,46 +42,44 @@ function getOrCreateClientId(): string {
 }
 
 function normalizeBaseUrl(url?: string): string {
-  const fallback = typeof window === 'undefined'
-    ? 'ws://localhost:8787'
+  const rawUrl = url?.trim();
+
+  if (!rawUrl && typeof window === 'undefined') {
+    return 'ws://localhost:8787/ws';
+  }
+
+  const fallbackOrigin = typeof window === 'undefined'
+    ? 'http://localhost:8787'
     : window.location.hostname === 'localhost'
-      ? 'ws://localhost:8787'
-      : 'wss://hanamikoji-server.g404338082.workers.dev';
+      ? 'http://localhost:8787'
+      : window.location.origin;
 
-  const raw = (url?.trim() || fallback).replace(/\/$/, '');
+  const normalizedInput = rawUrl && !/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(rawUrl) && !rawUrl.startsWith('/')
+    ? `https://${rawUrl}`
+    : rawUrl;
 
-  if (typeof window === 'undefined') {
-    return raw;
+  const parsed = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(normalizedInput ?? '')
+    ? new URL(normalizedInput!)
+    : new URL(normalizedInput || '/ws', fallbackOrigin);
+
+  if (parsed.protocol === 'http:') {
+    parsed.protocol = 'ws:';
+  } else if (parsed.protocol === 'https:') {
+    parsed.protocol = 'wss:';
   }
 
-  try {
-    const resolved = raw.startsWith('/')
-      ? new URL(raw, window.location.origin)
-      : new URL(raw);
-
-    if (resolved.protocol === 'http:') {
-      resolved.protocol = 'ws:';
-    } else if (resolved.protocol === 'https:') {
-      resolved.protocol = 'wss:';
-    }
-
-    return resolved.toString().replace(/\/$/, '');
-  } catch {
-    return fallback;
-  }
-}
-
-function buildSocketUrl(baseUrl: string, roomId: string, clientId: string): string {
-  const url = new URL(baseUrl);
-
-  if (!url.pathname.endsWith('/ws')) {
-    const pathname = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
-    url.pathname = `${pathname}/ws`;
+  if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+    throw new Error(`不支持的 Socket 协议: ${parsed.protocol}`);
   }
 
-  url.searchParams.set('roomId', roomId);
-  url.searchParams.set('clientPlayerId', clientId);
-  return url.toString();
+  const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = normalizedPath.endsWith('/ws')
+    ? (normalizedPath || '/ws')
+    : `${normalizedPath || ''}/ws`.replace(/\/+/g, '/');
+  parsed.search = '';
+  parsed.hash = '';
+
+  return parsed.toString().replace(/\/$/, '');
 }
 
 function normalizeRoomId(roomId: string | null | undefined): string {
@@ -225,9 +223,19 @@ export function createSocketClient(url?: string): SocketClient {
     }
 
     currentRoomId = normalizedRoomId;
-    const fullUrl = buildSocketUrl(baseUrl, normalizedRoomId, clientId);
-    ws = new WebSocket(fullUrl);
-    attachSocketHandlers(ws);
+    const wsUrl = new URL(baseUrl);
+    wsUrl.searchParams.set('roomId', normalizedRoomId);
+    wsUrl.searchParams.set('clientPlayerId', clientId);
+
+    try {
+      ws = new WebSocket(wsUrl.toString());
+      attachSocketHandlers(ws);
+    } catch (error) {
+      connected = false;
+      currentRoomId = null;
+      ws = null;
+      emitLocal('connect_error', error instanceof Error ? error : new Error('WebSocket 创建失败'));
+    }
   };
 
   const sendOrQueue = (message: QueuedMessage) => {

@@ -49,6 +49,18 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       return;
     }
 
+    const getConnectErrorMessage = (value: unknown) => {
+      if (value instanceof Error && value.message) {
+        return value.message;
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+
+      return '无法连接到游戏服务器，请检查 Pages 的 VITE_SOCKET_URL 是否指向你的 Worker 地址';
+    };
+
     const handleRoomJoined = (payload: { success: boolean; roomId?: string; message?: string }) => {
       setIsLoading(false);
 
@@ -83,11 +95,11 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
-    const handleConnectError = () => {
+    const handleConnectError = (reason: unknown) => {
+      setError(getConnectErrorMessage(reason));
       setIsLoading(false);
       setIsWaiting(false);
       setStatus(null);
-      setError('无法连接游戏服务器，请检查 Worker 地址与 WebSocket /ws 路径配置');
     };
 
     socket.on('roomJoined', handleRoomJoined);

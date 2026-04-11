@@ -41,26 +41,21 @@ function getOrCreateClientId(): string {
   return next;
 }
 
-function normalizeBaseUrl(url?: string): string {
-  const rawUrl = url?.trim();
-
-  if (!rawUrl && typeof window === 'undefined') {
-    return 'ws://localhost:8787/ws';
+function getDefaultSocketOrigin(): string {
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8787';
   }
 
-  const fallbackOrigin = typeof window === 'undefined'
-    ? 'http://localhost:8787'
-    : window.location.hostname === 'localhost'
-      ? 'http://localhost:8787'
-      : window.location.origin;
+  return window.location.hostname === 'localhost'
+    ? 'ws://localhost:8787'
+    : 'wss://hanamikoji-server.g404338082.workers.dev';
+}
 
-  const normalizedInput = rawUrl && !/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(rawUrl) && !rawUrl.startsWith('/')
-    ? `https://${rawUrl}`
-    : rawUrl;
-
-  const parsed = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(normalizedInput ?? '')
-    ? new URL(normalizedInput!)
-    : new URL(normalizedInput || '/ws', fallbackOrigin);
+function normalizeBaseUrl(url?: string): string {
+  const rawInput = url?.trim();
+  const raw = rawInput && rawInput.length > 0 ? rawInput : getDefaultSocketOrigin();
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const parsed = new URL(withScheme);
 
   if (parsed.protocol === 'http:') {
     parsed.protocol = 'ws:';
@@ -68,18 +63,18 @@ function normalizeBaseUrl(url?: string): string {
     parsed.protocol = 'wss:';
   }
 
-  if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
-    throw new Error(`不支持的 Socket 协议: ${parsed.protocol}`);
-  }
-
-  const normalizedPath = parsed.pathname.replace(/\/+$/, '');
-  parsed.pathname = normalizedPath.endsWith('/ws')
-    ? (normalizedPath || '/ws')
-    : `${normalizedPath || ''}/ws`.replace(/\/+/g, '/');
-  parsed.search = '';
-  parsed.hash = '';
-
+  parsed.pathname = parsed.pathname.replace(/\/$/, '');
   return parsed.toString().replace(/\/$/, '');
+}
+
+function buildWebSocketUrl(baseUrl: string, roomId: string, clientId: string): string {
+  const parsed = new URL(baseUrl);
+  const normalizedPath = parsed.pathname.replace(/\/$/, '');
+  parsed.pathname = normalizedPath.endsWith('/ws') ? normalizedPath : `${normalizedPath}/ws`;
+  parsed.search = '';
+  parsed.searchParams.set('roomId', roomId);
+  parsed.searchParams.set('clientPlayerId', clientId);
+  return parsed.toString();
 }
 
 function normalizeRoomId(roomId: string | null | undefined): string {
@@ -223,19 +218,9 @@ export function createSocketClient(url?: string): SocketClient {
     }
 
     currentRoomId = normalizedRoomId;
-    const wsUrl = new URL(baseUrl);
-    wsUrl.searchParams.set('roomId', normalizedRoomId);
-    wsUrl.searchParams.set('clientPlayerId', clientId);
-
-    try {
-      ws = new WebSocket(wsUrl.toString());
-      attachSocketHandlers(ws);
-    } catch (error) {
-      connected = false;
-      currentRoomId = null;
-      ws = null;
-      emitLocal('connect_error', error instanceof Error ? error : new Error('WebSocket 创建失败'));
-    }
+    const fullUrl = buildWebSocketUrl(baseUrl, normalizedRoomId, clientId);
+    ws = new WebSocket(fullUrl);
+    attachSocketHandlers(ws);
   };
 
   const sendOrQueue = (message: QueuedMessage) => {

@@ -49,18 +49,6 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       return;
     }
 
-    const getConnectErrorMessage = (value: unknown) => {
-      if (value instanceof Error && value.message) {
-        return value.message;
-      }
-
-      if (typeof value === 'string' && value.trim()) {
-        return value;
-      }
-
-      return '无法连接到游戏服务器，请检查 Pages 的 VITE_SOCKET_URL 是否指向你的 Worker 地址';
-    };
-
     const handleRoomJoined = (payload: { success: boolean; roomId?: string; message?: string }) => {
       setIsLoading(false);
 
@@ -95,25 +83,16 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
-    const handleConnectError = (reason: unknown) => {
-      setError(getConnectErrorMessage(reason));
-      setIsLoading(false);
-      setIsWaiting(false);
-      setStatus(null);
-    };
-
     socket.on('roomJoined', handleRoomJoined);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('gameStarted', handleGameStarted);
     socket.on('error', handleError);
-    socket.on('connect_error', handleConnectError);
 
     return () => {
       socket.off('roomJoined', handleRoomJoined);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('gameStarted', handleGameStarted);
       socket.off('error', handleError);
-      socket.off('connect_error', handleConnectError);
     };
   }, [onGameStart, playerName, socket]);
 

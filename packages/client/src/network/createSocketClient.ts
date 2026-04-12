@@ -41,47 +41,31 @@ function getOrCreateClientId(): string {
   return next;
 }
 
-function normalizeBaseUrl(url?: string): string {
-  const rawUrl = url?.trim();
-
-  if (!rawUrl) {
-    if (typeof window === 'undefined') {
-      return 'ws://localhost:8787/ws';
-    }
-
-    return window.location.hostname === 'localhost'
-      ? 'ws://localhost:8787/ws'
-      : 'wss://hanamikoji-server.g404338082.workers.dev/ws';
+function getDefaultBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8787';
   }
 
-  const hasProtocol = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(rawUrl);
-  const fallbackProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:'
-    ? 'https://'
-    : 'http://';
-  const normalizedInput = hasProtocol ? rawUrl : `${fallbackProtocol}${rawUrl}`;
-  const parsed = new URL(normalizedInput);
+  return window.location.hostname === 'localhost'
+    ? 'ws://localhost:8787'
+    : 'wss://hanamikoji-server.g404338082.workers.dev';
+}
 
-  if (parsed.protocol === 'http:') {
-    parsed.protocol = 'ws:';
-  } else if (parsed.protocol === 'https:') {
-    parsed.protocol = 'wss:';
-  } else if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
-    throw new Error(`不支持的 Socket 协议: ${parsed.protocol}`);
-  }
+function normalizeBaseUrl(rawUrl?: string): string {
+  const input = (rawUrl || getDefaultBaseUrl()).trim();
+  const candidate = /^https?:\/\//i.test(input) || /^wss?:\/\//i.test(input)
+    ? input
+    : `https://${input}`;
 
-  const pathname = parsed.pathname.replace(/\/$/, '');
+  const parsed = new URL(candidate);
+  parsed.protocol = parsed.protocol === 'http:' ? 'ws:' : parsed.protocol === 'https:' ? 'wss:' : parsed.protocol;
+
+  const pathname = parsed.pathname.replace(/\/+$/, '');
   parsed.pathname = pathname.endsWith('/ws') ? pathname : `${pathname || ''}/ws`;
   parsed.search = '';
   parsed.hash = '';
 
   return parsed.toString().replace(/\/$/, '');
-}
-
-function buildSocketUrl(baseUrl: string, roomId: string, clientId: string): string {
-  const parsed = new URL(baseUrl);
-  parsed.searchParams.set('roomId', roomId);
-  parsed.searchParams.set('clientPlayerId', clientId);
-  return parsed.toString();
 }
 
 function normalizeRoomId(roomId: string | null | undefined): string {
@@ -155,7 +139,7 @@ export function createSocketClient(url?: string): SocketClient {
   };
 
   const stopHeartbeat = () => {
-    if (heartbeatTimer !== null) {
+    if (typeof window !== 'undefined' && heartbeatTimer !== null) {
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
@@ -182,11 +166,13 @@ export function createSocketClient(url?: string): SocketClient {
       flushQueue();
 
       stopHeartbeat();
-      heartbeatTimer = window.setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }));
-        }
-      }, 30000);
+      if (typeof window !== 'undefined') {
+        heartbeatTimer = window.setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
+      }
     };
 
     socket.onclose = () => {
@@ -227,13 +213,13 @@ export function createSocketClient(url?: string): SocketClient {
     currentRoomId = normalizedRoomId;
 
     try {
-      const fullUrl = buildSocketUrl(baseUrl, normalizedRoomId, clientId);
-      ws = new WebSocket(fullUrl);
+      const fullUrl = new URL(baseUrl);
+      fullUrl.searchParams.set('roomId', normalizedRoomId);
+      fullUrl.searchParams.set('clientPlayerId', clientId);
+      ws = new WebSocket(fullUrl.toString());
       attachSocketHandlers(ws);
     } catch (error) {
-      connected = false;
-      ws = null;
-      emitLocal('connect_error', error instanceof Error ? error : new Error('WebSocket 初始化失败'));
+      emitLocal('connect_error', error instanceof Error ? error : new Error('WebSocket 地址无效'));
     }
   };
 
@@ -296,21 +282,17 @@ export function createSocketClient(url?: string): SocketClient {
       } else {
         handlers.clear();
       }
-
       return this;
     },
 
     disconnect() {
       stopHeartbeat();
-      sendQueue.length = 0;
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
       connected = false;
       currentRoomId = null;
-
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        ws.close();
-      }
-      ws = null;
-      listeners.clear();
     },
   };
 }

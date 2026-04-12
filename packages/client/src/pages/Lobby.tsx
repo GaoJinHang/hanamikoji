@@ -71,8 +71,10 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
     };
 
     const handleGameStarted = (state: GameState, playerId: 'p1' | 'p2') => {
+      setIsLoading(false);
       setIsWaiting(false);
       setStatus(null);
+      setError(null);
       onGameStart(state, playerId, state.roomId);
     };
 
@@ -90,11 +92,22 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
+    const handleDisconnect = () => {
+      setIsLoading(false);
+      if (!isWaiting) {
+        return;
+      }
+      setIsWaiting(false);
+      setStatus(null);
+      setError('与游戏服务器的连接已断开，请重新加入房间');
+    };
+
     socket.on('roomJoined', handleRoomJoined);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('gameStarted', handleGameStarted);
     socket.on('error', handleError);
     socket.on('connect_error', handleConnectError);
+    socket.on('disconnect', handleDisconnect);
 
     return () => {
       socket.off('roomJoined', handleRoomJoined);
@@ -102,8 +115,9 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       socket.off('gameStarted', handleGameStarted);
       socket.off('error', handleError);
       socket.off('connect_error', handleConnectError);
+      socket.off('disconnect', handleDisconnect);
     };
-  }, [onGameStart, playerName, socket]);
+  }, [isWaiting, onGameStart, playerName, socket]);
 
   const handleCreateRoom = () => {
     handleJoinRoom(null);

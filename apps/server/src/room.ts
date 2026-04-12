@@ -3,25 +3,33 @@
  * 每个房间对应一个 DO 实例，维护两个玩家的连接和游戏状态
  */
 
-import { DurableObject } from 'cloudflare:workers';
-import { createGameSetup, reducer, type EngineState } from '@hanamikoji/engine';
+import { createGameSetup, reducer, type EngineState } from '../../../packages/engine/src';
 import type {
   PlayerId, RoomPlayer, ActionType,
-  ClientMessage, ServerMessage, PlayerConnection, Env,
+  ClientMessage, ServerMessage, PlayerConnection,
 } from './types';
 
-export class GameRoom extends DurableObject<Env> {
+interface WorkerRuntimeWebSocket extends WebSocket {
+  accept(): void;
+}
+
+declare class WebSocketPair {
+  0: WorkerRuntimeWebSocket;
+  1: WorkerRuntimeWebSocket;
+}
+
+type WorkerResponseInit = ResponseInit & { webSocket?: WorkerRuntimeWebSocket };
+
+export class GameRoom {
   private players: Map<PlayerId, PlayerConnection> = new Map();
   private engineState: EngineState | null = null;
   private isGameStarted = false;
   private messageQueue: Map<PlayerId, ServerMessage[]> = new Map();
   private static readonly WS_OPEN = 1;
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-
-    this.ctx.blockConcurrencyWhile(async () => {
-      const stored = await this.ctx.storage.get<EngineState>('engineState');
+  constructor(private state: DurableObjectState) {
+    this.state.blockConcurrencyWhile(async () => {
+      const stored = await this.state.storage?.get<EngineState>('engineState');
       if (stored) {
         console.log('📦 从持久化存储恢复游戏状态');
         this.engineState = stored;
@@ -33,55 +41,58 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const upgradeHeader = request.headers.get('Upgrade');
-    if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-      return new Response('Expected WebSocket', { status: 426 });
+    const upgrade = request.headers.get('Upgrade');
+    if (upgrade?.toLowerCase() !== 'websocket') {
+      return new Response('Expected Upgrade: websocket', { status: 426 });
     }
 
-    if (this.players.size >= 2) {
+    const url = new URL(request.url);
+    const clientPlayerId = url.searchParams.get('clientPlayerId') || this.generateClientId();
+    const existingPlayer = Array.from(this.players.entries()).find(([_, player]) => player.clientPlayerId === clientPlayerId);
+
+    if (!existingPlayer && this.players.size >= 2) {
       return new Response('房间已满', { status: 429 });
     }
 
     const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-
+    const client = pair[0];
+    const server = pair[1];
     server.accept();
-    await this.handlePlayerConnection(server, request);
+
+    await this.handlePlayerConnection(server, request, clientPlayerId, existingPlayer?.[0]);
 
     return new Response(null, {
       status: 101,
       webSocket: client,
-    });
+    } as WorkerResponseInit);
   }
 
-  private async handlePlayerConnection(socket: WebSocket, request: Request): Promise<void> {
+  private async handlePlayerConnection(
+    socket: WorkerRuntimeWebSocket,
+    request: Request,
+    clientPlayerId: string,
+    existingPlayerId?: PlayerId,
+  ): Promise<void> {
     const url = new URL(request.url);
     const roomId = url.searchParams.get('roomId') || 'ROOM-001';
-    const clientPlayerId = url.searchParams.get('clientPlayerId') || this.generateClientId();
 
-    let playerId: PlayerId = 'p1';
-    const existingPlayer = Array.from(this.players.entries()).find(([_, player]) => player.clientPlayerId === clientPlayerId);
+    let playerId: PlayerId;
+    const existingPlayer = existingPlayerId ? this.players.get(existingPlayerId) : undefined;
 
-    if (existingPlayer) {
-      playerId = existingPlayer[0];
+    if (existingPlayerId && existingPlayer) {
+      playerId = existingPlayerId;
       console.log(`🔄 玩家 ${playerId} 重连，clientPlayerId: ${clientPlayerId}`);
-
-      try {
-        existingPlayer[1].socket.close(1000, 'replaced by new connection');
-      } catch (error) {
-        console.warn(`关闭旧连接失败: ${playerId}`, error);
-      }
     } else {
-      playerId = this.players.size === 0 ? 'p1' : 'p2';
+      playerId = this.players.has('p1') ? 'p2' : 'p1';
     }
 
     const playerConnection: PlayerConnection = {
       socket,
       playerId,
       connected: true,
-      joined: existingPlayer?.[1]?.joined ?? false,
+      joined: existingPlayer?.joined ?? false,
       clientPlayerId,
-      name: existingPlayer?.[1]?.name || `玩家${playerId === 'p1' ? '1' : '2'}`,
+      name: existingPlayer?.name || (playerId === 'p1' ? '玩家1' : '玩家2'),
     };
 
     this.players.set(playerId, playerConnection);
@@ -97,23 +108,23 @@ export class GameRoom extends DurableObject<Env> {
       },
     });
 
-    socket.addEventListener('message', (event: MessageEvent) => {
-      if (typeof event.data !== 'string') {
-        return;
-      }
-
-      this.handleMessage(playerId, event.data, roomId).catch((error) => {
+    socket.addEventListener('message', async (message: MessageEvent) => {
+      try {
+        if (typeof message.data === 'string') {
+          await this.handleMessage(playerId, message.data, roomId);
+        }
+      } catch (error) {
         console.error('处理消息失败:', error);
-      });
+      }
     });
 
     socket.addEventListener('close', () => {
       console.log(`❌ 玩家 ${playerId} 断开连接`);
-      this.handlePlayerDisconnect(playerId, socket);
+      this.handlePlayerDisconnect(playerId);
     });
 
-    socket.addEventListener('error', (event) => {
-      console.error(`❌ 玩家 ${playerId} WebSocket 错误:`, event);
+    socket.addEventListener('error', (error: Event) => {
+      console.error(`❌ 玩家 ${playerId} WebSocket 错误:`, error);
     });
 
     this.flushMessageQueue(playerId);
@@ -210,7 +221,7 @@ export class GameRoom extends DurableObject<Env> {
     try {
       const nextState = reducer(this.engineState, { type: 'DRAW_CARD', playerId });
       this.engineState = nextState;
-      this.ctx.storage.put('engineState', this.engineState).catch((error) => {
+      this.state.storage?.put('engineState', this.engineState).catch((error) => {
         console.error('保存游戏状态失败:', error);
       });
 
@@ -250,7 +261,7 @@ export class GameRoom extends DurableObject<Env> {
         grouping,
       });
       this.engineState = nextState;
-      this.ctx.storage.put('engineState', this.engineState).catch((error) => {
+      this.state.storage?.put('engineState', this.engineState).catch((error) => {
         console.error('保存游戏状态失败:', error);
       });
 
@@ -310,7 +321,7 @@ export class GameRoom extends DurableObject<Env> {
         selection,
       });
       this.engineState = nextState;
-      this.ctx.storage.put('engineState', this.engineState).catch((error) => {
+      this.state.storage?.put('engineState', this.engineState).catch((error) => {
         console.error('保存游戏状态失败:', error);
       });
 
@@ -359,7 +370,7 @@ export class GameRoom extends DurableObject<Env> {
 
     this.engineState = createGameSetup(roomId, { p1: p1Room, p2: p2Room }, 'p1', Date.now());
     this.isGameStarted = true;
-    await this.ctx.storage.put('engineState', this.engineState);
+    await this.state.storage?.put('engineState', this.engineState);
 
     this.sendToPlayer('p1', {
       type: 'gameStarted',
@@ -393,13 +404,9 @@ export class GameRoom extends DurableObject<Env> {
     });
   }
 
-  private handlePlayerDisconnect(playerId: PlayerId, socket?: WebSocket): void {
+  private handlePlayerDisconnect(playerId: PlayerId): void {
     const player = this.players.get(playerId);
     if (!player) {
-      return;
-    }
-
-    if (socket && player.socket !== socket) {
       return;
     }
 
@@ -414,8 +421,7 @@ export class GameRoom extends DurableObject<Env> {
     console.log(`👋 玩家 ${playerId} 离开房间`);
 
     setTimeout(() => {
-      const latestPlayer = this.players.get(playerId);
-      if (latestPlayer?.connected === false) {
+      if (this.players.get(playerId)?.connected === false) {
         this.players.delete(playerId);
         this.messageQueue.delete(playerId);
         console.log(`🗑️ 清理玩家 ${playerId} 连接`);
@@ -425,7 +431,7 @@ export class GameRoom extends DurableObject<Env> {
     if (this.isGameStarted) {
       this.isGameStarted = false;
       this.engineState = null;
-      this.ctx.storage.delete('engineState');
+      this.state.storage?.delete('engineState');
     }
   }
 

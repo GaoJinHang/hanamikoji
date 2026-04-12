@@ -41,7 +41,11 @@ function getOrCreateClientId(): string {
   return next;
 }
 
-function getDefaultBaseUrl(): string {
+function normalizeBaseUrl(url?: string): string {
+  if (url) {
+    return url.replace(/\/$/, '');
+  }
+
   if (typeof window === 'undefined') {
     return 'ws://localhost:8787';
   }
@@ -49,23 +53,6 @@ function getDefaultBaseUrl(): string {
   return window.location.hostname === 'localhost'
     ? 'ws://localhost:8787'
     : 'wss://hanamikoji-server.g404338082.workers.dev';
-}
-
-function normalizeBaseUrl(rawUrl?: string): string {
-  const input = (rawUrl || getDefaultBaseUrl()).trim();
-  const candidate = /^https?:\/\//i.test(input) || /^wss?:\/\//i.test(input)
-    ? input
-    : `https://${input}`;
-
-  const parsed = new URL(candidate);
-  parsed.protocol = parsed.protocol === 'http:' ? 'ws:' : parsed.protocol === 'https:' ? 'wss:' : parsed.protocol;
-
-  const pathname = parsed.pathname.replace(/\/+$/, '');
-  parsed.pathname = pathname.endsWith('/ws') ? pathname : `${pathname || ''}/ws`;
-  parsed.search = '';
-  parsed.hash = '';
-
-  return parsed.toString().replace(/\/$/, '');
 }
 
 function normalizeRoomId(roomId: string | null | undefined): string {
@@ -139,7 +126,7 @@ export function createSocketClient(url?: string): SocketClient {
   };
 
   const stopHeartbeat = () => {
-    if (typeof window !== 'undefined' && heartbeatTimer !== null) {
+    if (heartbeatTimer !== null) {
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
@@ -166,13 +153,11 @@ export function createSocketClient(url?: string): SocketClient {
       flushQueue();
 
       stopHeartbeat();
-      if (typeof window !== 'undefined') {
-        heartbeatTimer = window.setInterval(() => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 30000);
-      }
+      heartbeatTimer = window.setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 30000);
     };
 
     socket.onclose = () => {
@@ -211,16 +196,9 @@ export function createSocketClient(url?: string): SocketClient {
     }
 
     currentRoomId = normalizedRoomId;
-
-    try {
-      const fullUrl = new URL(baseUrl);
-      fullUrl.searchParams.set('roomId', normalizedRoomId);
-      fullUrl.searchParams.set('clientPlayerId', clientId);
-      ws = new WebSocket(fullUrl.toString());
-      attachSocketHandlers(ws);
-    } catch (error) {
-      emitLocal('connect_error', error instanceof Error ? error : new Error('WebSocket 地址无效'));
-    }
+    const fullUrl = `${baseUrl}/ws?roomId=${encodeURIComponent(normalizedRoomId)}&clientPlayerId=${encodeURIComponent(clientId)}`;
+    ws = new WebSocket(fullUrl);
+    attachSocketHandlers(ws);
   };
 
   const sendOrQueue = (message: QueuedMessage) => {
@@ -282,17 +260,21 @@ export function createSocketClient(url?: string): SocketClient {
       } else {
         handlers.clear();
       }
+
       return this;
     },
 
     disconnect() {
       stopHeartbeat();
-      if (ws) {
-        ws.close();
-        ws = null;
-      }
+      sendQueue.length = 0;
       connected = false;
       currentRoomId = null;
+
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close();
+      }
+      ws = null;
+      listeners.clear();
     },
   };
 }

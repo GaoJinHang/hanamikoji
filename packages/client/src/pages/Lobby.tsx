@@ -71,10 +71,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
     };
 
     const handleGameStarted = (state: GameState, playerId: 'p1' | 'p2') => {
-      setIsLoading(false);
       setIsWaiting(false);
       setStatus(null);
-      setError(null);
       onGameStart(state, playerId, state.roomId);
     };
 
@@ -85,39 +83,18 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
-    const handleConnectError = () => {
-      setError('无法连接到游戏服务器，请检查 Pages 的 VITE_SOCKET_URL 是否指向你的 Worker 地址');
-      setIsLoading(false);
-      setIsWaiting(false);
-      setStatus(null);
-    };
-
-    const handleDisconnect = () => {
-      setIsLoading(false);
-      if (!isWaiting) {
-        return;
-      }
-      setIsWaiting(false);
-      setStatus(null);
-      setError('与游戏服务器的连接已断开，请重新加入房间');
-    };
-
     socket.on('roomJoined', handleRoomJoined);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('gameStarted', handleGameStarted);
     socket.on('error', handleError);
-    socket.on('connect_error', handleConnectError);
-    socket.on('disconnect', handleDisconnect);
 
     return () => {
       socket.off('roomJoined', handleRoomJoined);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('gameStarted', handleGameStarted);
       socket.off('error', handleError);
-      socket.off('connect_error', handleConnectError);
-      socket.off('disconnect', handleDisconnect);
     };
-  }, [isWaiting, onGameStart, playerName, socket]);
+  }, [onGameStart, playerName, socket]);
 
   const handleCreateRoom = () => {
     handleJoinRoom(null);

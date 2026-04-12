@@ -73,3 +73,7 @@ interface WebSocket {
 interface Env {
   GAME_ROOM: DurableObjectNamespace;
 }
+
+declare class DurableObject {
+  constructor(state: DurableObjectState, env: unknown);
+}

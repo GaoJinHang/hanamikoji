@@ -1,9 +1,9 @@
 import type { ClientToServerEvents, ServerToClientEvents } from '@hanamikoji/shared';
 
-type EventName = keyof ServerToClientEvents | 'connect' | 'disconnect' | 'connect_error' | 'roomJoined' | 'stateSync';
+type EventName = Extract<keyof ServerToClientEvents, string> | 'connect' | 'disconnect' | 'connect_error' | 'roomJoined' | 'stateSync';
 type EventHandler = (...args: any[]) => void;
 
-type OutgoingEvent = keyof ClientToServerEvents | 'leaveRoom' | 'ping';
+type OutgoingEvent = Extract<keyof ClientToServerEvents, string> | 'leaveRoom' | 'ping';
 
 type QueuedMessage = {
   type: OutgoingEvent;
@@ -41,23 +41,72 @@ function getOrCreateClientId(): string {
   return next;
 }
 
-function normalizeBaseUrl(url?: string): string {
-  if (url) {
-    return url.replace(/\/$/, '');
-  }
-
-  if (typeof window === 'undefined') {
-    return 'ws://localhost:8787';
-  }
-
-  return window.location.hostname === 'localhost'
-    ? 'ws://localhost:8787'
-    : 'wss://hanamikoji-server.g404338082.workers.dev';
-}
-
 function normalizeRoomId(roomId: string | null | undefined): string {
   const trimmed = roomId?.trim().toUpperCase();
   return trimmed || 'ROOM-001';
+}
+
+function ensureProtocol(url: string): string {
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(url)) {
+    return url;
+  }
+  return `https://${url}`;
+}
+
+function normalizeCandidateBase(url?: string): string | null {
+  const raw = (url || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (raw.startsWith('/')) {
+    return raw.replace(/\/$/, '');
+  }
+
+  const withProtocol = ensureProtocol(raw);
+  return withProtocol
+    .replace(/^https:\/\//i, 'wss://')
+    .replace(/^http:\/\//i, 'ws://')
+    .replace(/\/$/, '');
+}
+
+function getSameOriginBase(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}`;
+}
+
+function getCandidateBases(url?: string): string[] {
+  const candidates = [normalizeCandidateBase(url), getSameOriginBase()].filter((value): value is string => Boolean(value));
+  return Array.from(new Set(candidates));
+}
+
+function buildSocketUrl(base: string, roomId: string, clientId: string): string {
+  const normalizedRoomId = normalizeRoomId(roomId);
+  const isRelative = base.startsWith('/');
+
+  const url = isRelative
+    ? new URL(base, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    : new URL(base);
+
+  if (url.protocol === 'http:') {
+    url.protocol = 'ws:';
+  } else if (url.protocol === 'https:') {
+    url.protocol = 'wss:';
+  }
+
+  if (!url.pathname || url.pathname === '/') {
+    url.pathname = '/ws';
+  } else if (!url.pathname.endsWith('/ws')) {
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
+  }
+
+  url.searchParams.set('roomId', normalizedRoomId);
+  url.searchParams.set('clientPlayerId', clientId);
+  return url.toString();
 }
 
 function buildPayload(event: OutgoingEvent, args: any[], clientId: string): unknown {
@@ -104,15 +153,16 @@ function normalizeIncomingMessage(message: { type: string; payload?: any }, emit
 }
 
 export function createSocketClient(url?: string): SocketClient {
-  const baseUrl = normalizeBaseUrl(url);
   const clientId = getOrCreateClientId();
   const listeners = new Map<string, Set<EventHandler>>();
   const sendQueue: QueuedMessage[] = [];
+  const candidateBases = getCandidateBases(url);
 
   let connected = false;
   let currentRoomId: string | null = null;
   let ws: WebSocket | null = null;
   let heartbeatTimer: number | null = null;
+  let activeAttemptToken = 0;
 
   const emitLocal = (event: string, ...args: any[]) => {
     const handlers = listeners.get(event);
@@ -126,7 +176,7 @@ export function createSocketClient(url?: string): SocketClient {
   };
 
   const stopHeartbeat = () => {
-    if (heartbeatTimer !== null) {
+    if (typeof window !== 'undefined' && heartbeatTimer !== null) {
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
@@ -146,46 +196,17 @@ export function createSocketClient(url?: string): SocketClient {
     }
   };
 
-  const attachSocketHandlers = (socket: WebSocket) => {
-    socket.onopen = () => {
-      connected = true;
-      emitLocal('connect');
-      flushQueue();
-
-      stopHeartbeat();
-      heartbeatTimer = window.setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }));
-        }
-      }, 30000);
-    };
-
-    socket.onclose = () => {
-      if (ws !== socket) {
-        return;
-      }
-      connected = false;
-      stopHeartbeat();
-      emitLocal('disconnect');
-    };
-
-    socket.onerror = (event) => {
-      emitLocal('connect_error', event);
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        normalizeIncomingMessage(message, emitLocal);
-      } catch (error) {
-        console.error('解析消息失败:', error);
-      }
-    };
+  const reportConnectError = (message: string) => {
+    emitLocal('connect_error', new Error(message));
   };
 
-  const connectToRoom = (roomId: string) => {
+  const connectWithFallback = (roomId: string, baseIndex = 0) => {
     const normalizedRoomId = normalizeRoomId(roomId);
-    if (ws && currentRoomId === normalizedRoomId && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    const token = ++activeAttemptToken;
+    const base = candidateBases[baseIndex];
+
+    if (!base) {
+      reportConnectError('未配置可用的游戏服务器地址');
       return;
     }
 
@@ -196,9 +217,94 @@ export function createSocketClient(url?: string): SocketClient {
     }
 
     currentRoomId = normalizedRoomId;
-    const fullUrl = `${baseUrl}/ws?roomId=${encodeURIComponent(normalizedRoomId)}&clientPlayerId=${encodeURIComponent(clientId)}`;
-    ws = new WebSocket(fullUrl);
-    attachSocketHandlers(ws);
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(buildSocketUrl(base, normalizedRoomId, clientId));
+    } catch (error) {
+      if (baseIndex + 1 < candidateBases.length) {
+        connectWithFallback(normalizedRoomId, baseIndex + 1);
+        return;
+      }
+      reportConnectError(error instanceof Error ? error.message : '无法创建 WebSocket 连接');
+      return;
+    }
+
+    ws = socket;
+    let opened = false;
+    let failedBeforeOpen = false;
+
+    socket.onopen = () => {
+      if (token !== activeAttemptToken || ws !== socket) {
+        socket.close();
+        return;
+      }
+
+      opened = true;
+      connected = true;
+      emitLocal('connect');
+      flushQueue();
+
+      if (typeof window !== 'undefined') {
+        stopHeartbeat();
+        heartbeatTimer = window.setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
+      }
+    };
+
+    const failBeforeOpen = (message: string) => {
+      if (opened || failedBeforeOpen || token !== activeAttemptToken || ws !== socket) {
+        return;
+      }
+
+      failedBeforeOpen = true;
+      connected = false;
+      stopHeartbeat();
+
+      if (baseIndex + 1 < candidateBases.length) {
+        connectWithFallback(normalizedRoomId, baseIndex + 1);
+        return;
+      }
+
+      reportConnectError(message);
+    };
+
+    socket.onerror = () => {
+      const isPrimary = baseIndex === 0;
+      failBeforeOpen(isPrimary && candidateBases.length > 1
+        ? '直连 Worker 失败，已尝试 Pages 同源代理，但仍无法连接'
+        : '无法连接到游戏服务器');
+    };
+
+    socket.onclose = () => {
+      if (token !== activeAttemptToken || ws !== socket) {
+        return;
+      }
+
+      if (!opened) {
+        const isPrimary = baseIndex === 0;
+        failBeforeOpen(isPrimary && candidateBases.length > 1
+          ? '直连 Worker 失败，已尝试 Pages 同源代理，但仍无法连接'
+          : '无法连接到游戏服务器');
+        return;
+      }
+
+      connected = false;
+      stopHeartbeat();
+      emitLocal('disconnect');
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        normalizeIncomingMessage(message, emitLocal);
+      } catch (error) {
+        console.error('解析消息失败:', error);
+      }
+    };
   };
 
   const sendOrQueue = (message: QueuedMessage) => {
@@ -222,7 +328,7 @@ export function createSocketClient(url?: string): SocketClient {
     emit(event: OutgoingEvent, ...args: any[]) {
       if (event === 'joinRoom') {
         const roomId = normalizeRoomId(args[0] ?? null);
-        connectToRoom(roomId);
+        connectWithFallback(roomId, 0);
         sendOrQueue({
           type: event,
           payload: buildPayload(event, args, clientId),
@@ -260,21 +366,18 @@ export function createSocketClient(url?: string): SocketClient {
       } else {
         handlers.clear();
       }
-
       return this;
     },
 
     disconnect() {
       stopHeartbeat();
-      sendQueue.length = 0;
       connected = false;
       currentRoomId = null;
-
+      activeAttemptToken += 1;
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         ws.close();
       }
       ws = null;
-      listeners.clear();
     },
   };
 }

@@ -1,6 +1,6 @@
 name = "hanamikoji-server"
 main = "apps/server/src/worker.ts"
-compatibility_date = "2026-03-31"
+compatibility_date = "2025-04-05"
 workers_dev = true
 
 [durable_objects]
@@ -12,7 +12,9 @@ bindings = [
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
 
-# Worker 直接由 Wrangler 打包 TypeScript 源码，不需要额外构建命令。
-# 保留空配置可避免部署时触发 pnpm build 导致的无部署/无响应问题。
+[dev]
+port = 8787
+local_protocol = "http"
+
 [env.production.vars]
 NODE_ENV = "production"

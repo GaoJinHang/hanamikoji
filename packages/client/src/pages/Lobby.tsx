@@ -83,16 +83,26 @@ export const Lobby: React.FC<LobbyProps> = ({ onGameStart, savedRoomId, savedPla
       setStatus(null);
     };
 
+    const handleConnectError = (error: unknown) => {
+      const message = error instanceof Error ? error.message : '无法连接到游戏服务器，请检查 Pages 和 Worker 部署';
+      setError(message);
+      setIsLoading(false);
+      setIsWaiting(false);
+      setStatus(null);
+    };
+
     socket.on('roomJoined', handleRoomJoined);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('gameStarted', handleGameStarted);
     socket.on('error', handleError);
+    socket.on('connect_error', handleConnectError);
 
     return () => {
       socket.off('roomJoined', handleRoomJoined);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('gameStarted', handleGameStarted);
       socket.off('error', handleError);
+      socket.off('connect_error', handleConnectError);
     };
   }, [onGameStart, playerName, socket]);
 

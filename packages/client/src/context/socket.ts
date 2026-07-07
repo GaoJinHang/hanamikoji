@@ -26,6 +26,10 @@ function normalizeUrl(url: string): string {
  *
  * 也兼容 VITE_API_BASE_URL，方便后续把 HTTP API 与 Socket 服务统一到一个后端域名。
  */
+export function hasExplicitSocketBackend(): boolean {
+  return Boolean((import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE_URL)?.trim());
+}
+
 function getSocketUrl(): string {
   const envUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE_URL;
 

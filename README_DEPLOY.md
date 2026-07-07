@@ -72,6 +72,17 @@ VITE_API_BASE_URL=https://api.example.com
 3. 不要在末尾加 `/`，例如推荐 `https://api.example.com`，不是 `https://api.example.com/`。
 
 
+### 只想先部署前端、测试离线 P2P
+
+如果你还没有部署后端，也可以先把前端部署到 Cloudflare Pages。此时：
+
+1. 在线服务器模式不能创建/加入房间，因为它必须连接后端 Socket.IO 服务。
+2. relay 一次扫码也不能使用，因为 relay API `/api/p2p/*` 在后端。
+3. 仍然可以测试“纯离线 P2P 兜底”：Host 新建离线房间后，把 invite 链接/文本发给 Player；Player 生成 answer 后，再复制回 Host 当前页面粘贴导入。
+4. 新版大厅在生产环境未检测到 `VITE_SOCKET_URL` / `VITE_API_BASE_URL` 时，会默认显示“离线 P2P 模式（前端-only 可测）”，并在在线模式里提示为什么按钮不可用。
+
+这不是 bug，而是前端-only 部署的边界：静态网页可以运行 UI 和浏览器 WebRTC，但在线匹配、房间管理和 relay signaling 都需要后端。
+
 ---
 
 ## 1.1 离线 P2P / signaling relay 边界

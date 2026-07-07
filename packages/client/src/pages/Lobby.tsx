@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsConnected, useSocket } from '../hooks';
+import { hasExplicitSocketBackend } from '../context/socket';
 import type { JoinRoomResponse, PlayerId, RoomPlayer } from '@hanamikoji/shared';
 import type { OfflineP2PConnection } from '../connection';
 import {
@@ -13,6 +14,7 @@ import { clearOfflineHash, parseOfflineHash } from '../p2p/inviteUrl';
 import { loadClientSession, loadHostSnapshot } from '../p2p/storage';
 import { OfflineReadyRoom } from '../components/p2p/OfflineReadyRoom';
 import { OfflineRoomInvite } from '../components/p2p/OfflineRoomInvite';
+import { getInitialLobbyMode, getOnlineBackendNotice, type LobbyMode } from './lobbyMode';
 
 interface LobbyProps {
   savedRoomId: string | null;
@@ -21,14 +23,18 @@ interface LobbyProps {
   onOfflineStateChanged: () => void;
 }
 
-type LobbyMode = 'online' | 'offline-p2p';
 type OfflineRole = 'host' | 'player';
 type OfflineSession = HostOfflineSession | PlayerOfflineSession;
 
 export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOfflineGameReady, onOfflineStateChanged }) => {
   const socket = useSocket();
   const isConnected = useIsConnected();
-  const [mode, setMode] = useState<LobbyMode>('online');
+  const hasExplicitOnlineBackend = hasExplicitSocketBackend();
+  const [mode, setMode] = useState<LobbyMode>(() => getInitialLobbyMode({
+    isProduction: import.meta.env.PROD,
+    hasExplicitBackend: hasExplicitOnlineBackend,
+    hasOfflineHash: typeof window !== 'undefined' && Boolean(parseOfflineHash(window.location.hash)),
+  }));
   const [offlineRole, setOfflineRole] = useState<OfflineRole>('host');
   const [playerName, setPlayerName] = useState(savedPlayerId ? (savedPlayerId === 'p1' ? '玩家1' : '玩家2') : '');
   const [roomCode, setRoomCode] = useState(savedRoomId || '');
@@ -275,6 +281,12 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
   };
 
   const isOnlineJoinDisabled = isLoading || isWaiting || !isConnected || !playerName.trim();
+  const onlineBackendNotice = getOnlineBackendNotice({
+    isProduction: import.meta.env.PROD,
+    hasExplicitBackend: hasExplicitOnlineBackend,
+    isConnected,
+  });
+  const showFrontendOnlyOfflineNotice = import.meta.env.PROD && !hasExplicitOnlineBackend;
 
   return (
     <div className="min-h-screen bg-game-bg flex items-center justify-center p-4">
@@ -286,7 +298,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
         <div className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
             <button type="button" onClick={() => { setMode('online'); resetMessages(); }} className={`py-2 rounded-lg text-sm font-medium ${mode === 'online' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>在线服务器模式</button>
-            <button type="button" onClick={() => { setMode('offline-p2p'); resetMessages(); }} className={`py-2 rounded-lg text-sm font-medium ${mode === 'offline-p2p' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>离线 P2P 模式</button>
+            <button type="button" onClick={() => { setMode('offline-p2p'); resetMessages(); }} className={`py-2 rounded-lg text-sm font-medium ${mode === 'offline-p2p' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>离线 P2P 模式（前端-only 可测）</button>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">您的名称</label>
@@ -294,17 +306,30 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
           </div>
           {mode === 'online' ? (
             <>
+              {onlineBackendNotice && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm leading-relaxed">
+                  <div className="font-medium mb-1">在线服务器模式当前不可用</div>
+                  <div>{onlineBackendNotice}</div>
+                  <button type="button" onClick={() => { setMode('offline-p2p'); resetMessages(); }} className="mt-3 w-full py-2 rounded-lg bg-game-primary text-white font-medium">切换到离线 P2P 模式</button>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">房间号（可选）</label>
                 <input type="text" value={roomCode} onChange={event => setRoomCode(event.target.value.toUpperCase())} placeholder="输入房间号加入现有房间" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none uppercase" disabled={isLoading || isWaiting} maxLength={6} />
               </div>
               <div className="space-y-3 pt-2">
-                <button type="button" onClick={handleCreateRoom} disabled={isOnlineJoinDisabled} className={`w-full py-3 rounded-xl font-medium ${isOnlineJoinDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-game-primary text-white hover:bg-opacity-90 active:scale-95'}`}>{isLoading ? '正在加入...' : (isWaiting ? '等待对手加入...' : '开始游戏（自动匹配）')}</button>
+                <button type="button" onClick={handleCreateRoom} disabled={isOnlineJoinDisabled} className={`w-full py-3 rounded-xl font-medium ${isOnlineJoinDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-game-primary text-white hover:bg-opacity-90 active:scale-95'}`}>{isLoading ? '正在加入...' : (isWaiting ? '等待对手加入...' : '开始在线游戏（需要服务器）')}</button>
                 {roomCode.trim() && <button type="button" onClick={handleJoinExistingRoom} disabled={isOnlineJoinDisabled} className={`w-full py-3 rounded-xl font-medium ${isOnlineJoinDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-game-secondary text-white hover:bg-opacity-90 active:scale-95'}`}>加入房间 {roomCode}</button>}
               </div>
             </>
           ) : (
             <>
+              {showFrontendOnlyOfflineNotice && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm leading-relaxed">
+                  <div className="font-medium mb-1">前端-only 离线测试入口</div>
+                  <div>你当前没有配置后端地址。可以先用“新建离线房间”生成纯离线邀请，在第二台设备粘贴/打开邀请后生成 Player answer，再复制回 Host 当前页面导入。relay 一次扫码需要部署后端 /api/p2p；没有后端时会自动回退到复制粘贴流程。</div>
+                </div>
+              )}
               <OfflineRoomInvite
                 role={offlineRole}
                 setRole={setOfflineRole}

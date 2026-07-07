@@ -207,24 +207,26 @@ export interface RoomState {
 // Socket 事件类型
 // ============================================
 
+export interface GameOverPayload {
+  winner: PlayerId | null;
+  isDraw: boolean;
+  reason: string;
+  finalScores: {
+    p1: { geishaCount: number; totalCharm: number };
+    p2: { geishaCount: number; totalCharm: number };
+  };
+}
+
 export interface ServerToClientEvents {
   playerJoined: (player: RoomPlayer) => void;
   playerLeft: (playerId: PlayerId) => void;
-  gameStarted: (state: GameState, playerId: PlayerId) => void;
+  gameStarted: (state: GameState, playerId: PlayerId, reconnectToken: string) => void;
   gameStateUpdate: (state: GameState) => void;
   phaseChanged: (phase: GamePhase, activePlayer: PlayerId) => void;
   actionRequired: (type: ActionType, minCards: number, maxCards: number) => void;
   choiceRequired: (action: PendingAction) => void;
   error: (message: string) => void;
-  gameOver: (result: {
-    winner: PlayerId | null;
-    isDraw: boolean;
-    reason: string;
-    finalScores: {
-      p1: { geishaCount: number; totalCharm: number };
-      p2: { geishaCount: number; totalCharm: number };
-    };
-  }) => void;
+  gameOver: (result: GameOverPayload) => void;
   opponentDisconnected: () => void;
   opponentReconnected: () => void;
 }
@@ -241,12 +243,14 @@ export interface ClientToServerEvents {
   }) => void;
   resolveAction: (selection: number) => void;
   cancelAction: () => void;
-  reconnect: (roomId: string, playerId: PlayerId) => void;
+  resumeGame: (roomId: string, playerId: PlayerId, reconnectToken: string) => void;
 }
 
 export interface JoinRoomResponse {
   success: boolean;
   roomId?: string;
+  playerId?: PlayerId;
+  reconnectToken?: string;
   message?: string;
 }
 

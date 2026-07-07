@@ -4,12 +4,12 @@
  */
 
 import React from 'react';
-import { GeishaCard as GeishaCardType, GeishaCharm } from '@hanamikoji/shared';
+import type { GeishaCard as GeishaCardType, GeishaCharm, PlayerId } from '@hanamikoji/shared';
 import { GeishaCard } from './GeishaCard';
 
 interface GeishaGridProps {
   geishas: Record<GeishaCharm, GeishaCardType>;
-  currentPlayerId: 'p1' | 'p2';
+  currentPlayerId: PlayerId;
 }
 
 export const GeishaGrid: React.FC<GeishaGridProps> = ({ geishas, currentPlayerId }) => {

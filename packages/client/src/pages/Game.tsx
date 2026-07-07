@@ -3,10 +3,9 @@
  * 显示完整的游戏界面，包括艺伎区、手牌区和操作面板
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useSocket } from '../hooks';
-import { GameState as GameStateType, ActionType, PlayerId, ItemCard, PendingAction } from '@hanamikoji/shared';
-import { ACTION_CONFIG, ITEM_CARDS, getCharmFromCardId } from '@hanamikoji/engine';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ACTION_CONFIG, MAX_ROUNDS, getCardDetails } from '@hanamikoji/shared';
+import type { ActionType, GameOverPayload, ItemCard, PendingAction } from '@hanamikoji/shared';
 import { Header } from '../components/layout/Header';
 import { GeishaGrid } from '../components/geisha/GeishaGrid';
 import { ActionPanel } from '../components/action/ActionPanel';
@@ -15,33 +14,15 @@ import { GameOverModal } from '../components/modal/GameOverModal';
 import { WaitingModal } from '../components/modal/WaitingModal';
 import { GiftModal } from '../components/action/GiftModal';
 import { CompetitionModal } from '../components/action/CompetitionModal';
+import type { GameConnection } from '../connection';
 
 interface GameProps {
-  gameState: GameStateType;
-  playerId: PlayerId;
+  connection: GameConnection;
   onLeave: () => void;
 }
 
-/**
- * 获取卡牌详情
- */
-function getCardDetails(cardIds: string[]): ItemCard[] {
-  return cardIds
-    .map(id => ITEM_CARDS.find((c: ItemCard) => c.id === id))
-    .filter((c): c is ItemCard => c !== undefined);
-}
-
-export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
-  const socket = useSocket();
-  
-  // 检查 gameState 是否更新
-  React.useEffect(() => {
-    console.log('🎮 Game 组件: gameState 已更新');
-    console.log('   玩家 p1 手牌数量:', gameState.players.p1.hand.length);
-    console.log('   玩家 p2 手牌数量:', gameState.players.p2.hand.length);
-    console.log('   当前阶段:', gameState.phase);
-    console.log('   当前玩家:', gameState.activePlayer);
-  }, [gameState]);
+export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
+  const { gameState, playerId } = connection;
   
   // 当前玩家状态
   const currentPlayer = gameState.players[playerId];
@@ -51,6 +32,7 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   const isMyTurn = gameState.activePlayer === playerId;
   const isMyActionPhase = playerId === 'p1' ? gameState.phase === 'p1_action' : gameState.phase === 'p2_action';
   const isMySelectPhase = playerId === 'p1' ? gameState.phase === 'p1_select' : gameState.phase === 'p2_select';
+  const isMyDrawPhase = playerId === 'p1' ? gameState.phase === 'p1_draw' : gameState.phase === 'p2_draw';
   
   // 选中的卡牌
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -58,26 +40,17 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   
   // 模态框状态
   const [showGameOver, setShowGameOver] = useState(false);
-  const [showWaiting, setShowWaiting] = useState(false);
   const [showGift, setShowGift] = useState(false);
   const [showCompetition, setShowCompetition] = useState(false);
   
   // 游戏结束数据
-  const [gameOverData, setGameOverData] = useState<any>(null);
-
-  // 检查是否需要等待对手
-  useEffect(() => {
-    const waitingPhases = ['p1_draw', 'p2_draw', 'p1_select', 'p2_select'];
-    const shouldWait = waitingPhases.includes(gameState.phase) && !isMyTurn;
-    setShowWaiting(shouldWait);
-  }, [gameState.phase, isMyTurn]);
+  const [gameOverData, setGameOverData] = useState<GameOverPayload | null>(null);
 
   // 监听行动要求
   useEffect(() => {
-    if (!socket || !socket.emit) return;
-
-    const handleActionRequired = (type: ActionType, minCards: number, maxCards: number) => {
-      console.log('需要执行行动:', type);
+    const handleActionRequired = (_type: ActionType, _minCards: number, _maxCards: number) => {
+      setSelectedCards([]);
+      setCurrentAction(null);
     };
 
     const handleChoiceRequired = (pendingAction: PendingAction) => {
@@ -93,28 +66,42 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
       }
     };
 
-    const handleGameOver = (data: any) => {
+    const handleGameOver = (data: GameOverPayload) => {
       setGameOverData(data);
       setShowGameOver(true);
     };
 
-    const handlePhaseChanged = (phase: string, activePlayer: PlayerId) => {
+    const handlePhaseChanged = () => {
       setSelectedCards([]);
       setCurrentAction(null);
     };
 
-    socket.on('actionRequired', handleActionRequired);
-    socket.on('choiceRequired', handleChoiceRequired);
-    socket.on('gameOver', handleGameOver);
-    socket.on('phaseChanged', handlePhaseChanged);
+    const unsubscribers = [
+      connection.on('actionRequired', handleActionRequired),
+      connection.on('choiceRequired', handleChoiceRequired),
+      connection.on('gameOver', handleGameOver),
+      connection.on('phaseChanged', handlePhaseChanged),
+    ];
 
     return () => {
-      socket.off('actionRequired', handleActionRequired);
-      socket.off('choiceRequired', handleChoiceRequired);
-      socket.off('gameOver', handleGameOver);
-      socket.off('phaseChanged', handlePhaseChanged);
+      unsubscribers.forEach(unsubscribe => unsubscribe());
     };
-  }, [socket]);
+  }, [connection, playerId]);
+
+  // 以服务端状态为准打开/关闭选择弹窗，避免遗漏一次性连接事件。
+  useEffect(() => {
+    const pending = gameState.pendingAction;
+    setShowGift(pending?.type === 'gift' && pending.chooser === playerId);
+
+    if (pending?.type === 'competition') {
+      setShowCompetition(pending.chooser === playerId);
+      return;
+    }
+
+    if (currentAction !== 'competition') {
+      setShowCompetition(false);
+    }
+  }, [gameState.pendingAction, playerId, currentAction]);
 
   // 处理卡牌选择
   const handleCardSelect = useCallback((cardId: string) => {
@@ -141,7 +128,6 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
 
   // 确认执行行动
   const handleConfirmAction = useCallback(() => {
-    if (!socket || !socket.emit) return;
     if (!currentAction || selectedCards.length === 0) return;
 
     const cardCount = ACTION_CONFIG[currentAction].cardCount;
@@ -154,14 +140,14 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
       return;
     }
 
-    socket.emit('playAction', {
+    connection.sendPlayAction({
       type: currentAction,
       cardIds: selectedCards,
     });
 
     setCurrentAction(null);
     setSelectedCards([]);
-  }, [socket, currentAction, selectedCards]);
+  }, [connection, currentAction, selectedCards]);
 
   // 取消行动
   const handleCancelAction = useCallback(() => {
@@ -171,23 +157,20 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
 
   // 抽牌
   const handleDrawCard = useCallback(() => {
-    if (!socket || !socket.emit) return;
     if (!isMyTurn) return;
-    socket.emit('drawCard');
-  }, [socket, isMyTurn]);
+    connection.sendDrawCard();
+  }, [connection, isMyTurn]);
 
   // 处理赠予选择完成
   const handleGiftComplete = useCallback((selectedIndex: number) => {
-    if (!socket || !socket.emit) return;
-    socket.emit('resolveAction', selectedIndex);
+    connection.sendResolveAction(selectedIndex);
     setShowGift(false);
-  }, [socket]);
+  }, [connection]);
 
   // 处理竞争分组完成
   const handleCompetitionComplete = useCallback((grouping: string[][]) => {
-    if (!socket || !socket.emit) return;
     if (selectedCards.length !== 4) return;
-    socket.emit('playAction', {
+    connection.sendPlayAction({
       type: 'competition',
       cardIds: selectedCards,
       grouping,
@@ -195,20 +178,20 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
     setShowCompetition(false);
     setCurrentAction(null);
     setSelectedCards([]);
-  }, [socket, selectedCards]);
+  }, [connection, selectedCards]);
 
   // 处理竞争选择完成（作为选择者）
   const handleCompetitionSelect = useCallback((selectedIndex: number) => {
-    if (!socket || !socket.emit) return;
-    socket.emit('resolveAction', selectedIndex);
+    connection.sendResolveAction(selectedIndex);
     setShowCompetition(false);
-  }, [socket]);
+  }, [connection]);
 
   // 关闭游戏结束弹窗
   const handleCloseGameOver = useCallback(() => {
     setShowGameOver(false);
+    connection.leaveRoom();
     onLeave();
-  }, [onLeave]);
+  }, [connection, onLeave]);
 
   // 获取当前阶段显示名称
   const getPhaseDisplayName = () => {
@@ -227,10 +210,7 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
   };
 
   // 获取卡牌详情
-  // 计算手牌详情
-  const handCards = React.useMemo(() => {
-    return getCardDetails(currentPlayer.hand);
-  }, [currentPlayer.hand]);
+  const handCards = getCardDetails(currentPlayer.hand);
 
   // 竞争模态框所需的数据：
   // - 发起者本地分组阶段：使用当前选中的4张手牌
@@ -246,7 +226,8 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
     ? gameState.pendingAction.initiator === playerId
     : true;
 
-  // 赠予行动的类型安全访问
+  const waitingPhases = ['p1_draw', 'p2_draw', 'p1_select', 'p2_select'];
+  const showWaiting = waitingPhases.includes(gameState.phase) && !isMyTurn;
 
   return (
     <div className="h-screen flex flex-col bg-game-bg overflow-hidden">
@@ -257,7 +238,7 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
         isMyTurn={isMyTurn}
         phaseName={getPhaseDisplayName()}
         round={gameState.round}
-        maxRounds={3}
+        maxRounds={MAX_ROUNDS}
         roomId={gameState.roomId}
       />
 
@@ -281,7 +262,7 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
           onConfirm={handleConfirmAction}
           onCancel={handleCancelAction}
           onDraw={handleDrawCard}
-          canDraw={isMyTurn && gameState.phase.includes('draw')}
+          canDraw={isMyTurn && isMyDrawPhase}
         />
 
         {/* 手牌区 */}
@@ -316,7 +297,6 @@ export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
         cardDetails={competitionCardDetails}
         grouping={competitionGrouping}
         selectedCards={selectedCards}
-        onGroupChange={setSelectedCards}
         onComplete={handleCompetitionComplete}
         onSelect={handleCompetitionSelect}
         isInitiator={competitionIsInitiator}

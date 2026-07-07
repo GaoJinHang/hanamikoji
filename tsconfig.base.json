@@ -6,8 +6,24 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@hanamikoji/shared": ["packages/shared/src/index.ts"],
-      "@hanamikoji/shared/*": ["packages/shared/src/*"]
+      "@hanamikoji/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@hanamikoji/shared/*": [
+        "packages/shared/src/*"
+      ],
+      "@hanamikoji/engine": [
+        "packages/engine/src/index.ts"
+      ],
+      "@hanamikoji/engine/*": [
+        "packages/engine/src/*"
+      ],
+      "@hanamikoji/p2p": [
+        "packages/p2p/src/index.ts"
+      ],
+      "@hanamikoji/p2p/*": [
+        "packages/p2p/src/*"
+      ]
     },
     "strict": true,
     "esModuleInterop": true,

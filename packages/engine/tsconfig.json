@@ -18,8 +18,7 @@
   ],
   "references": [
     {
-      "path": "../shared/tsconfig.json",
-      "composite":   true
+      "path": "../shared/tsconfig.json"
     }
   ]
 }

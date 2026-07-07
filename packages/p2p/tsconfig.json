@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "module": "ESNext",
+    "target": "ES2020",
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@hanamikoji/shared": [
+        "../shared/dist/index.d.ts"
+      ],
+      "@hanamikoji/shared/*": [
+        "../shared/dist/*.d.ts"
+      ],
+      "@hanamikoji/engine": [
+        "../engine/dist/index.d.ts"
+      ],
+      "@hanamikoji/engine/*": [
+        "../engine/dist/*.d.ts"
+      ]
+    },
+    "lib": [
+      "ES2020",
+      "DOM"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

@@ -3,6 +3,7 @@ export * from './game/reducer';
 export * from './game/actions';
 export * from './game/types';
 export * from './game/replay';
+export * from './game/cardAccounting';
 export * from './game/winCheck';
 export * from './rules/cards';
 export * from './rules/geisha';

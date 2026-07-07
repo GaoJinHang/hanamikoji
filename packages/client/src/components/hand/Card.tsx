@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ItemCard } from '@hanamikoji/shared';
+import type { ItemCard } from '@hanamikoji/shared';
 
 interface CardProps {
   card: ItemCard;

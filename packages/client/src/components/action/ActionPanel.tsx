@@ -4,8 +4,8 @@
  */
 
 import React from 'react';
-import { PlayerActions, ActionType } from '@hanamikoji/shared';
-import { ACTION_CONFIG } from '@hanamikoji/engine';
+import { ACTION_CONFIG } from '@hanamikoji/shared';
+import type { ActionType, PlayerActions } from '@hanamikoji/shared';
 
 interface ActionPanelProps {
   actions: PlayerActions;
@@ -44,7 +44,7 @@ const ActionButton: React.FC<{
             ? 'ring-2 ring-offset-1'
             : 'hover:bg-opacity-80 active:scale-95'
         }
-        ${isSelected ? `bg-[${config.color}] text-white` : ''}
+        ${isSelected ? 'text-white' : ''}
       `}
       style={{ 
         backgroundColor: isSelected ? config.color : undefined,

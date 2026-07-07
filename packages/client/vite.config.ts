@@ -9,6 +9,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../shared/src'),
       '@hanamikoji/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@hanamikoji/p2p': path.resolve(__dirname, '../p2p/src/index.ts'),
       '@hanamikoji/engine': path.resolve(__dirname, '../engine/src/index.ts'),
     },
   },
@@ -18,6 +19,10 @@ export default defineConfig({
       '/socket.io': {
         target: 'http://localhost:3001',
         ws: true,
+      },
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
       },
     },
   },

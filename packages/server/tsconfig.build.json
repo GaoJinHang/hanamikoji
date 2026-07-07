@@ -5,7 +5,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "module": "CommonJS",
-    "skipLibCheck": true
+    "baseUrl": ".",
+    "paths": {
+      "@hanamikoji/shared": ["../shared/src/index.ts"],
+      "@hanamikoji/shared/*": ["../shared/src/*"],
+      "@hanamikoji/engine": ["../engine/src/index.ts"],
+      "@hanamikoji/engine/*": ["../engine/src/*"]
+    }
   },
   "references": [
     {
@@ -17,8 +23,5 @@
   ],
   "include": [
     "src/**/*"
-  ],
-  "exclude": [
-    "src/worker/**/*"
   ]
 }

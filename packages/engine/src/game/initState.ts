@@ -11,7 +11,7 @@ export interface InitStateParams {
   hands: { p1: string[]; p2: string[] };
   deck: string[];
   firstPlayer?: PlayerId;
-  rngState: number;
+  rngState?: number;
 }
 
 function createInitialGeishas(): Record<GeishaCharm, GeishaCard> {
@@ -38,7 +38,7 @@ export function initState(params: InitStateParams): EngineState {
   const firstPlayer: PlayerId = params.firstPlayer ?? 'p1';
   const phase = firstPlayer === 'p1' ? 'p1_draw' : 'p2_draw';
 
-  const publicState: GameState = {
+  const gameState: GameState = {
     roomId: params.roomId,
     round: 1,
     phase,
@@ -77,9 +77,9 @@ export function initState(params: InitStateParams): EngineState {
   };
 
   return {
-    publicState,
+    gameState,
     deck: [...params.deck],
     meta: { needsRoundSetup: false },
-    rngState: params.rngState,
+    rngState: params.rngState ?? 0,
   };
 }

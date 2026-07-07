@@ -5,7 +5,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "pnpm -C ../shared build && node ./scripts/build-dual.mjs",
-    "test": "pnpm run build && node --test test/**/*.test.js"
+    "test": "pnpm run build && node --test test/**/*.test.js",
+    "test:fast": "pnpm run build && SIM_COUNT=20 node --test test/reducer.test.js test/reducerValidation.test.js test/replay.test.js test/simulation.test.js",
+    "test:sim": "pnpm run build && node --test test/simulation.test.js"
   },
   "dependencies": {
     "@hanamikoji/shared": "workspace:^"

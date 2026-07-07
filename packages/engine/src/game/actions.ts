@@ -1,8 +1,8 @@
 /**
  * Engine - action creators (optional utility)
  */
-import { ActionType, PlayerId } from '@hanamikoji/shared';
-import { EngineAction, RoundSetupPayload } from './types';
+import type { ActionType, PlayerId } from '@hanamikoji/shared';
+import type { EngineAction, RoundSetupPayload } from './types';
 
 export const EngineActions = {
   drawCard: (playerId: PlayerId): EngineAction => ({ type: 'DRAW_CARD', playerId }),
@@ -19,6 +19,10 @@ export const EngineActions = {
     selection,
     roundSetup,
   }),
-  applyRoundSetup: (deck: string[], hands: { p1: string[]; p2: string[] }): EngineAction => ({ type: 'APPLY_ROUND_SETUP', deck, hands }),
+  applyRoundSetup: (
+    deck: string[],
+    hands: { p1: string[]; p2: string[] },
+    rngState?: number
+  ): EngineAction => ({ type: 'APPLY_ROUND_SETUP', deck, hands, rngState }),
   setConnected: (playerId: PlayerId, connected: boolean, socketId?: string): EngineAction => ({ type: 'SET_CONNECTED', playerId, connected, socketId }),
 } as const;

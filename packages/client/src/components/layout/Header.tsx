@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { PlayerState } from '@hanamikoji/shared';
+import type { PlayerState } from '@hanamikoji/shared';
 
 interface HeaderProps {
   opponent: PlayerState;

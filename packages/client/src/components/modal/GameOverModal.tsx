@@ -4,19 +4,11 @@
  */
 
 import React from 'react';
-import { PlayerId } from '@hanamikoji/shared';
+import type { GameOverPayload, PlayerId } from '@hanamikoji/shared';
 
 interface GameOverModalProps {
   isOpen: boolean;
-  gameOverData: {
-    winner: PlayerId | null;
-    isDraw: boolean;
-    reason: string;
-    finalScores: {
-      p1: { geishaCount: number; totalCharm: number };
-      p2: { geishaCount: number; totalCharm: number };
-    };
-  } | null;
+  gameOverData: GameOverPayload | null;
   playerId: PlayerId;
   onClose: () => void;
 }
@@ -87,7 +79,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               }`}>
                 P1
               </div>
-              <span className="font-medium">{isWin && playerId === 'p1' ? '你' : '对手'}</span>
+              <span className="font-medium">{playerId === 'p1' ? '你' : '对手'}</span>
             </div>
             <div className="text-right">
               <div className="font-bold text-lg">{gameOverData.finalScores.p1.totalCharm} 分</div>
@@ -106,7 +98,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               }`}>
                 P2
               </div>
-              <span className="font-medium">{isWin && playerId === 'p2' ? '你' : '对手'}</span>
+              <span className="font-medium">{playerId === 'p2' ? '你' : '对手'}</span>
             </div>
             <div className="text-right">
               <div className="font-bold text-lg">{gameOverData.finalScores.p2.totalCharm} 分</div>

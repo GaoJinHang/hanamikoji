@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { GeishaCard as GeishaCardType, PlayerId } from '@hanamikoji/shared';
+import type { GeishaCard as GeishaCardType, PlayerId } from '@hanamikoji/shared';
 
 interface GeishaCardProps {
   geisha: GeishaCardType;
@@ -20,19 +20,6 @@ function getItemCounts(geisha: GeishaCardType): { p1: number; p2: number } {
     p2: geisha.items.p2.length,
   };
 }
-
-/**
- * 艺伎名称显示
- */
-const geishaNames: Record<number, string> = {
-  2: '樱',
-  3: '梅',
-  4: '兰',
-  5: '竹',
-  6: '菊',
-  7: '玫瑰',
-  8: '百合',
-};
 
 export const GeishaCardComponent: React.FC<GeishaCardProps> = ({ geisha, currentPlayerId }) => {
   const counts = getItemCounts(geisha);

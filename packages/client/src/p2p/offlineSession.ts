@@ -96,6 +96,8 @@ export interface CreateHostOfflineSessionOptions {
 }
 
 const DEFAULT_READY: Record<PlayerId, boolean> = { p1: false, p2: false };
+const HOST_CONNECTION_TIMEOUT_MS = 20_000;
+const PLAYER_JOIN_RETRY_MS = 1_500;
 
 export async function createHostOfflineSession(
   playerName: string,
@@ -125,6 +127,13 @@ export async function createHostOfflineSession(
   let controllerDisposed = false;
   let answerPolling: AnswerPollingController | null = null;
   let relayInvite: CreateRelayInviteResult | null = null;
+  let hostConnectionTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+  const clearHostConnectionTimeout = () => {
+    if (!hostConnectionTimeout) return;
+    globalThis.clearTimeout(hostConnectionTimeout);
+    hostConnectionTimeout = null;
+  };
 
   const saved = options.restoreLastHost ? loadClientSession() : null;
   const resume = saved?.role === 'host'
@@ -149,6 +158,7 @@ export async function createHostOfflineSession(
     if (controllerDisposed) return;
     controllerDisposed = true;
     answerPolling?.stop();
+    clearHostConnectionTimeout();
     if (relayInvite) void deleteInvite(relayInvite.inviteId).catch(() => undefined);
     connection?.dispose();
     clientRuntime.dispose();
@@ -206,13 +216,28 @@ export async function createHostOfflineSession(
   const joinUrl = relayResult.joinUrl;
 
   switchboard.addRoute(remotePeerId, rtcEndpoint);
-  rtcEndpoint.onReconnect(() => setSessionStatus('DataChannel 已连接，等待 Player 加入或双方 Ready。'));
+  rtcEndpoint.onReconnect(() => {
+    clearHostConnectionTimeout();
+    setSessionStatus('DataChannel 已连接，等待 Player 加入或双方 Ready。');
+  });
   rtcEndpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开，请重新创建/恢复房间并交换连接信息。'));
+
+  const startHostConnectionWatchdog = () => {
+    clearHostConnectionTimeout();
+    if (rtcEndpoint.isOnline) return;
+    hostConnectionTimeout = globalThis.setTimeout(() => {
+      if (controllerDisposed || rtcEndpoint.isOnline) return;
+      const message = '已导入 answer，但 20 秒内没有建立 DataChannel。纯手动 WebRTC P2P 不能保证所有网络都能直连：请确认两台设备同时停留在此页面，优先使用同一 Wi-Fi 或手机热点；若仍失败，需要配置 TURN 或改用在线服务器模式。';
+      setSessionStatus(message);
+      callbacks.onError(message);
+    }, HOST_CONNECTION_TIMEOUT_MS);
+  };
 
   const applyAnswerText = async (answerText: string, relayPlayerName?: string) => {
     const answerSignal = await readPlayerAnswerSignal(answerText, hostRuntime.roomId);
     setSessionStatus(relayPlayerName ? `已收到 ${relayPlayerName} 的 relay answer，正在建立 DataChannel。` : '已导入 answer，正在建立 DataChannel。');
     await rtcEndpoint.applyAnswer(answerSignal);
+    startHostConnectionWatchdog();
   };
 
   if (relayInvite) {
@@ -266,6 +291,13 @@ export async function createPlayerOfflineSession(
   let connectionStatus = 'Player answer 已生成，请复制回 Host 当前页面导入。';
   let connection: OfflineP2PConnection | null = null;
   let controllerDisposed = false;
+  let joinRetryTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+
+  const stopJoinRetry = () => {
+    if (!joinRetryTimer) return;
+    globalThis.clearInterval(joinRetryTimer);
+    joinRetryTimer = null;
+  };
 
   const saved = loadClientSession();
   const resume = saved?.role === 'player' && saved.roomId === offer.roomId
@@ -286,9 +318,13 @@ export async function createPlayerOfflineSession(
     notifyLobby();
   };
 
+  let stopJoinRetryOnJoined: RuntimeUnsubscribe | null = null;
+
   const controllerDispose = () => {
     if (controllerDisposed) return;
     controllerDisposed = true;
+    stopJoinRetry();
+    stopJoinRetryOnJoined?.();
     connection?.dispose();
     clientRuntime.dispose();
     endpoint.disconnect();
@@ -304,17 +340,40 @@ export async function createPlayerOfflineSession(
     return connection;
   };
 
-  endpoint.onReconnect(() => setSessionStatus('DataChannel 已连接，已自动发送 JOIN_REQUEST，等待双方 Ready。'));
-  endpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开，请重新交换连接信息。'));
+  const sendJoinRequest = () => {
+    clientRuntime.join({
+      requestedRoomId: offer.roomId,
+      requestedPlayerId: resume?.playerId,
+      reconnectToken: resume?.reconnectToken,
+      lastStateVersion: resume?.stateVersion,
+      lastViewHash: resume?.viewHash ?? undefined,
+    });
+  };
+
+  const startJoinRetry = () => {
+    sendJoinRequest();
+    if (joinRetryTimer) return;
+    joinRetryTimer = globalThis.setInterval(() => {
+      if (controllerDisposed || clientRuntime.playerId || !endpoint.isOnline) {
+        stopJoinRetry();
+        return;
+      }
+      sendJoinRequest();
+    }, PLAYER_JOIN_RETRY_MS);
+  };
 
   bindClientRuntime(clientRuntime, 'player', callbacks, offer.roomId, ensureConnection, notifyLobby, setSessionStatus);
-  clientRuntime.join({
-    requestedRoomId: offer.roomId,
-    requestedPlayerId: resume?.playerId,
-    reconnectToken: resume?.reconnectToken,
-    lastStateVersion: resume?.stateVersion,
-    lastViewHash: resume?.viewHash ?? undefined,
+  stopJoinRetryOnJoined = clientRuntime.on('joined', stopJoinRetry);
+  endpoint.onReconnect(() => {
+    setSessionStatus('DataChannel 已连接，正在向 Host 发送 JOIN_REQUEST，等待 Host 确认加入。');
+    startJoinRetry();
   });
+  endpoint.onDisconnect(() => {
+    stopJoinRetry();
+    setSessionStatus('DataChannel 已断开，请重新交换连接信息。');
+  });
+  startJoinRetry();
+  if (endpoint.isOnline) startJoinRetry();
 
   const answerText = encodeSignalPayload(signal);
   const answerPayload: OfflineAnswerPayload = {

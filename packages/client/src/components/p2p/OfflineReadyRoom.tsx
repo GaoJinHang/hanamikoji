@@ -12,7 +12,8 @@ export const OfflineReadyRoom: React.FC<OfflineReadyRoomProps> = ({ view, onSetR
   const p1 = findPlayerName(view, 'p1');
   const p2 = findPlayerName(view, 'p2');
   const hostLabel = view.hostPlayerId === 'p1' ? p1 : p2;
-  const canToggleReady = Boolean(view.playerId) && !view.gameStarted;
+  const readyDisabledReason = getReadyDisabledReason(view);
+  const canToggleReady = !readyDisabledReason;
   const showStart = view.isHostPlayer && !view.gameStarted;
 
   return (
@@ -55,6 +56,7 @@ export const OfflineReadyRoom: React.FC<OfflineReadyRoomProps> = ({ view, onSetR
             {view.canStart ? '开始游戏' : '等待双方 Ready'}
           </button>
         )}
+        {readyDisabledReason && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">{readyDisabledReason}</div>}
         {!view.isHostPlayer && <div className="text-xs text-gray-500 text-center">只有 Host 玩家可以在双方 Ready 后开始游戏。</div>}
       </div>
     </div>
@@ -71,6 +73,15 @@ const ReadyCard: React.FC<{ label: PlayerId; name: string; ready: boolean; isMe:
     <div className={`mt-2 text-sm font-medium ${ready ? 'text-green-600' : 'text-gray-400'}`}>{ready ? '已准备' : '未准备'}</div>
   </div>
 );
+
+function getReadyDisabledReason(view: OfflineLobbyView): string | null {
+  if (view.gameStarted) return '游戏已开始，不能再修改 Ready。';
+  if (view.playerId) return null;
+  if (view.role === 'player') {
+    return '尚未收到 Host 的 JOIN_ACCEPT，所以暂时不能 Ready。请确认 Host 已导入 answer，并保持两台设备都停留在当前页面等待 DataChannel 连接。';
+  }
+  return '本机 Host 玩家尚未加入本地房间，请重新创建或恢复 Host 房间。';
+}
 
 function findPlayerName(view: OfflineLobbyView, playerId: PlayerId): string {
   return view.players.find(player => player.playerId === playerId)?.name ?? (playerId === 'p1' ? '等待 Host' : '等待 Player');

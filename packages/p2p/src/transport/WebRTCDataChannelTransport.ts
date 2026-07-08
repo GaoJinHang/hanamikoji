@@ -20,7 +20,11 @@ export interface WebRTCAcceptOfferOptions {
 
 const SIGNAL_KIND = 'hanamikoji-webrtc-signal' as const;
 const CHANNEL_LABEL = 'hanamikoji-p2p';
-const ICE_GATHERING_TIMEOUT_MS = 4000;
+const ICE_GATHERING_TIMEOUT_MS = 10_000;
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+];
 
 /**
  * Browser WebRTC DataChannel endpoint for one remote peer.
@@ -117,7 +121,29 @@ export class WebRTCDataChannelEndpoint implements TransportEndpoint {
     if (answer.hostPeerId !== this.peerId || answer.remotePeerId !== this.remotePeerId) {
       throw new Error('信令不匹配：answer 不属于当前离线房间。');
     }
-    await this.peerConnection.setRemoteDescription(answer.description);
+
+    const activeRemoteAnswer = this.peerConnection.currentRemoteDescription?.type === 'answer'
+      ? this.peerConnection.currentRemoteDescription
+      : this.peerConnection.remoteDescription?.type === 'answer'
+        ? this.peerConnection.remoteDescription
+        : null;
+
+    if (activeRemoteAnswer) {
+      if (!activeRemoteAnswer.sdp || activeRemoteAnswer.sdp === answer.description.sdp) return;
+      throw new Error('当前 Host 已导入过另一份 Player answer。请重新创建离线房间并重新交换邀请。');
+    }
+
+    if (this.peerConnection.signalingState === 'stable') {
+      throw new Error('当前 WebRTC 连接已经处于 stable 状态。请不要重复导入 answer；若仍未连接，请重新创建离线房间。');
+    }
+
+    try {
+      await this.peerConnection.setRemoteDescription(answer.description);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (String(this.peerConnection.signalingState) === 'stable' && message.includes('stable')) return;
+      throw error;
+    }
   }
 
   get isOnline(): boolean {
@@ -199,11 +225,11 @@ export class WebRTCDataChannelEndpoint implements TransportEndpoint {
   }
 }
 
-function createPeerConnection(iceServers: RTCIceServer[] = []): RTCPeerConnection {
+function createPeerConnection(iceServers?: RTCIceServer[]): RTCPeerConnection {
   if (typeof RTCPeerConnection === 'undefined') {
     throw new Error('当前浏览器不支持 WebRTC DataChannel。');
   }
-  return new RTCPeerConnection({ iceServers });
+  return new RTCPeerConnection({ iceServers: iceServers?.length ? iceServers : DEFAULT_ICE_SERVERS });
 }
 
 async function waitForIceGatheringComplete(peerConnection: RTCPeerConnection): Promise<void> {

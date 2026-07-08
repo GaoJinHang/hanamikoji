@@ -223,7 +223,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
     try {
       await session.applyAnswer(hostAnswerInput);
       setOfflineLobbyView(session.getLobbyView());
-      setStatus('已导入 Player answer，正在连接。');
+      setStatus('已导入 Player answer，正在连接。请保持 Host 和 Player 两个页面都打开，等待 DataChannel 完成后自动加入。');
     } catch (err) {
       setError(toFriendlyError(err));
     } finally {
@@ -417,7 +417,12 @@ const ModeSummary: React.FC<{ mode: LobbyMode; isConnected: boolean; hasExplicit
 
 function toFriendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : '离线 P2P 操作失败';
-  if (message.includes('ICE') || message.includes('DataChannel') || message.includes('WebRTC')) return `${message} 请优先使用同一 Wi-Fi 或手机热点。`;
+  if (message.includes('wrong state: stable') || message.includes('处于 stable 状态')) {
+    return '这个 Player answer 已经导入过。请不要重复导入；如果仍未连接，请确认 Player 页面仍打开并等待 20 秒。仍失败时需要重新创建离线房间，或配置 TURN/改用在线服务器模式。';
+  }
+  if (message.includes('ICE') || message.includes('DataChannel') || message.includes('WebRTC')) {
+    return `${message} 请优先使用同一 Wi-Fi 或手机热点；跨运营商网络、校园/企业网或严格 NAT 可能必须配置 TURN，或者改用在线服务器模式。`;
+  }
   if (message.includes('INVITE_NOT_FOUND') || message.includes('invite 不存在') || message.includes('邀请已过期')) return '邀请已过期，请重新创建离线房间。';
   return message;
 }

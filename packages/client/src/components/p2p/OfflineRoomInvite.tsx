@@ -33,8 +33,8 @@ export interface OfflineRoomInviteProps {
 export const OfflineRoomInvite: React.FC<OfflineRoomInviteProps> = props => (
   <div className="space-y-4">
     <div className="grid grid-cols-2 gap-2">
-      <button type="button" onClick={() => props.setRole('host')} className={`py-2 rounded-xl border text-sm font-medium ${props.role === 'host' ? 'border-game-primary text-game-primary bg-white' : 'border-gray-200 text-gray-600'}`}>创建离线房间（Host）</button>
-      <button type="button" onClick={() => props.setRole('player')} className={`py-2 rounded-xl border text-sm font-medium ${props.role === 'player' ? 'border-game-primary text-game-primary bg-white' : 'border-gray-200 text-gray-600'}`}>加入离线房间（Player）</button>
+      <button type="button" onClick={() => props.setRole('host')} className={`py-2 rounded-xl border text-sm font-medium ${props.role === 'host' ? 'border-game-primary text-game-primary bg-white shadow-sm' : 'border-gray-200 text-gray-600'}`}>我是 Host：创建邀请</button>
+      <button type="button" onClick={() => props.setRole('player')} className={`py-2 rounded-xl border text-sm font-medium ${props.role === 'player' ? 'border-game-primary text-game-primary bg-white shadow-sm' : 'border-gray-200 text-gray-600'}`}>我是 Player：加入邀请</button>
     </div>
     {props.savedP2PSession && (
       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
@@ -42,6 +42,7 @@ export const OfflineRoomInvite: React.FC<OfflineRoomInviteProps> = props => (
         {props.hasHostSnapshot ? ' Host 本机也保存了权威快照。' : ''} 这只恢复本机快照；断线后仍需重新交换 offer/answer，不代表 Player 重新扫码一定能恢复。
       </div>
     )}
+    <OfflineFlowSteps role={props.role} relayReady={Boolean(props.hostRelayInviteId) || props.playerRelaySubmitted} />
     <RelayBoundaryNotice />
     {props.role === 'host' ? <HostInvitePanel {...props} /> : <PlayerInvitePanel {...props} />}
     <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-xs leading-relaxed">
@@ -50,9 +51,32 @@ export const OfflineRoomInvite: React.FC<OfflineRoomInviteProps> = props => (
   </div>
 );
 
+const OfflineFlowSteps: React.FC<{ role: OfflineInviteRole; relayReady: boolean }> = ({ role, relayReady }) => {
+  const steps = role === 'host'
+    ? [
+        '点击“新建离线房间”生成邀请。',
+        relayReady ? '让 Player 扫码/打开链接；relay 会自动回传 answer。' : '把二维码、链接或 invite 文本发给 Player。',
+        '如果没有 relay，等待 Player 复制 answer 回来并在本页导入。',
+      ]
+    : [
+        '扫码、打开 Host 链接，或粘贴 Host invite 文本。',
+        '填写昵称后点击“加入并生成/提交 answer”。',
+        'relay 可用时自动回传；否则复制 answer 给 Host 导入。',
+      ];
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-600">
+      <div className="font-medium text-gray-800 mb-2">离线 P2P 使用步骤</div>
+      <ol className="space-y-1 list-decimal list-inside">
+        {steps.map(step => <li key={step}>{step}</li>)}
+      </ol>
+    </div>
+  );
+};
+
 const RelayBoundaryNotice: React.FC = () => (
   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-xs leading-relaxed">
-    离线 P2P 对局：relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作，也不等于公网穿透。连接建立后，游戏动作通过两台设备之间的 P2P DataChannel 传输；同一 Wi-Fi / 手机热点成功率最高。
+    离线 P2P 不是“无网络”，而是不依赖游戏后端保存状态：relay 只交换 offer/answer，连接建立后游戏动作通过两台设备之间的 P2P DataChannel 传输。同一 Wi-Fi / 手机热点成功率最高。
   </div>
 );
 
@@ -62,7 +86,7 @@ const HostInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
       <button type="button" onClick={props.onCreateNewHost} disabled={props.isLoading} className={`w-full py-3 rounded-xl font-medium ${props.isLoading ? 'bg-gray-300 text-gray-500' : 'bg-game-primary text-white'}`}>{props.isLoading ? '正在生成邀请...' : '新建离线房间'}</button>
       <button type="button" onClick={props.onRestoreHost} disabled={props.isLoading || !props.hasHostSnapshot} className={`w-full py-3 rounded-xl font-medium ${props.isLoading || !props.hasHostSnapshot ? 'bg-gray-300 text-gray-500' : 'bg-game-secondary text-white'}`}>恢复本机 Host 快照</button>
     </div>
-    <div className="text-xs text-gray-500">“新建离线房间”不会复用旧 Host snapshot；恢复本机快照需要你明确点击恢复按钮，但仍会生成新的 offer/answer 交换，不承诺 Player 重新扫码恢复。</div>
+    <div className="text-xs text-gray-500">优先点击“新建离线房间”。只有需要恢复本机保存的 Host 权威快照时，再点击“恢复本机 Host 快照”；恢复也会重新交换 offer/answer。</div>
 
     {props.hostRelayInviteId && (
       <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-xs leading-relaxed">
@@ -75,7 +99,7 @@ const HostInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
       </div>
     )}
 
-    {props.hostJoinUrl && <QRCodeBox title={props.hostRelayInviteId ? '一次扫码 relay 加入链接 / 二维码' : '纯离线 Player 加入链接 / 二维码（Host 后续需粘贴 answer）'} value={props.hostJoinUrl} onCopy={props.onCopy} />}
+    {props.hostJoinUrl && <QRCodeBox title={props.hostRelayInviteId ? '发给 Player：一次扫码加入链接 / 二维码' : '发给 Player：纯离线加入链接 / 二维码（Host 后续需粘贴 answer）'} value={props.hostJoinUrl} copyLabel="复制加入链接" onCopy={props.onCopy} />}
     {props.hostInviteText && <SignalBox label="纯离线兜底：长 invite 文本（HANA-INVITE-V1）" value={props.hostInviteText} onCopy={() => props.onCopy(props.hostInviteText)} />}
     {props.hostOffer && <SignalBox label="高级兜底：旧版 Host offer（HANA-P2P-V1）" value={props.hostOffer} onCopy={() => props.onCopy(props.hostOffer)} />}
     {props.hostOffer && (
@@ -92,15 +116,15 @@ const PlayerInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
   <div className="space-y-3">
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">Host 邀请链接 / invite / 旧版 offer</label>
-      <textarea value={props.playerOfferInput} onChange={event => props.setPlayerOfferInput(event.target.value)} placeholder="粘贴 relay 一次扫码链接、纯离线 HANA-INVITE-V1 邀请链接/文本，或旧 HANA-P2P-V1 offer" className="w-full h-32 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none" />
+      <textarea value={props.playerOfferInput} onChange={event => props.setPlayerOfferInput(event.target.value)} placeholder="扫码打开后会自动填入；也可以粘贴 relay 链接、纯离线 HANA-INVITE-V1 invite 文本，或旧 HANA-P2P-V1 offer" className="w-full h-32 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none" />
     </div>
-    <button type="button" onClick={props.onCreatePlayer} disabled={props.isLoading || !props.playerOfferInput.trim()} className={`w-full py-3 rounded-xl font-medium ${props.isLoading || !props.playerOfferInput.trim() ? 'bg-gray-300 text-gray-500' : 'bg-game-primary text-white'}`}>{props.isLoading ? '正在生成 answer...' : '加入并生成 Player answer'}</button>
+    <button type="button" onClick={props.onCreatePlayer} disabled={props.isLoading || !props.playerOfferInput.trim()} className={`w-full py-3 rounded-xl font-medium ${props.isLoading || !props.playerOfferInput.trim() ? 'bg-gray-300 text-gray-500' : 'bg-game-primary text-white'}`}>{props.isLoading ? '正在处理邀请...' : '加入并生成/提交 answer'}</button>
     {props.playerRelaySubmitted && (
       <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-xs leading-relaxed">
         已通过 relay 自动提交 Player answer。请等待 Host 当前页面自动建立 DataChannel；relay 不保存手牌、EngineState、eventLog 或游戏动作。
       </div>
     )}
-    {props.playerAnswerInviteText && <QRCodeBox title={props.playerRelaySubmitted ? '手动兜底 answer 文本（通常无需复制）' : 'Player answer 文本（复制回 Host 当前页面粘贴）'} value={props.playerAnswerInviteText} onCopy={props.onCopy} />}
+    {props.playerAnswerInviteText && <QRCodeBox title={props.playerRelaySubmitted ? '手动兜底 answer 文本（通常无需复制）' : '复制给 Host：Player answer 文本'} value={props.playerAnswerInviteText} copyLabel="复制 answer" onCopy={props.onCopy} />}
     {props.playerAnswerUrl && <SignalBox label="answer URL（高级备用；Host 仍建议在当前页面粘贴导入）" value={props.playerAnswerUrl} onCopy={() => props.onCopy(props.playerAnswerUrl)} />}
     {props.playerAnswer && <SignalBox label="高级兜底：旧版 Player answer（HANA-P2P-V1）" value={props.playerAnswer} onCopy={() => props.onCopy(props.playerAnswer)} />}
   </div>

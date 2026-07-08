@@ -14,7 +14,7 @@ import { clearOfflineHash, parseOfflineHash } from '../p2p/inviteUrl';
 import { loadClientSession, loadHostSnapshot } from '../p2p/storage';
 import { OfflineReadyRoom } from '../components/p2p/OfflineReadyRoom';
 import { OfflineRoomInvite } from '../components/p2p/OfflineRoomInvite';
-import { getInitialLobbyMode, getOnlineBackendNotice, type LobbyMode } from './lobbyMode';
+import { getInitialLobbyMode, getOnlineBackendNotice, getRequestedLobbyModeFromSearch, type LobbyMode } from './lobbyMode';
 
 interface LobbyProps {
   savedRoomId: string | null;
@@ -34,6 +34,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
     isProduction: import.meta.env.PROD,
     hasExplicitBackend: hasExplicitOnlineBackend,
     hasOfflineHash: typeof window !== 'undefined' && Boolean(parseOfflineHash(window.location.hash)),
+    requestedMode: typeof window !== 'undefined' ? getRequestedLobbyModeFromSearch(window.location.search) : null,
   }));
   const [offlineRole, setOfflineRole] = useState<OfflineRole>('host');
   const [playerName, setPlayerName] = useState(savedPlayerId ? (savedPlayerId === 'p1' ? '玩家1' : '玩家2') : '');
@@ -77,6 +78,17 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
     setPlayerAnswerUrl('');
     setPlayerRelaySubmitted(false);
     setOfflineLobbyView(null);
+  };
+
+  const switchMode = (nextMode: LobbyMode) => {
+    setMode(nextMode);
+    setIsWaiting(false);
+    resetMessages();
+  };
+
+  const switchOfflineRole = (nextRole: OfflineRole) => {
+    setOfflineRole(nextRole);
+    resetMessages();
   };
 
   useEffect(() => {
@@ -297,9 +309,10 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
         </div>
         <div className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
-            <button type="button" onClick={() => { setMode('online'); resetMessages(); }} className={`py-2 rounded-lg text-sm font-medium ${mode === 'online' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>在线服务器模式</button>
-            <button type="button" onClick={() => { setMode('offline-p2p'); resetMessages(); }} className={`py-2 rounded-lg text-sm font-medium ${mode === 'offline-p2p' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>离线 P2P 模式（前端-only 可测）</button>
+            <button type="button" onClick={() => switchMode('offline-p2p')} className={`py-2 rounded-lg text-sm font-medium ${mode === 'offline-p2p' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>离线 P2P 模式</button>
+            <button type="button" onClick={() => switchMode('online')} className={`py-2 rounded-lg text-sm font-medium ${mode === 'online' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>在线服务器模式</button>
           </div>
+          <ModeSummary mode={mode} isConnected={isConnected} hasExplicitOnlineBackend={hasExplicitOnlineBackend} />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">您的名称</label>
             <input type="text" value={playerName} onChange={event => setPlayerName(event.target.value)} placeholder="请输入名称" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none" disabled={isLoading || isWaiting} maxLength={12} />
@@ -310,7 +323,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm leading-relaxed">
                   <div className="font-medium mb-1">在线服务器模式当前不可用</div>
                   <div>{onlineBackendNotice}</div>
-                  <button type="button" onClick={() => { setMode('offline-p2p'); resetMessages(); }} className="mt-3 w-full py-2 rounded-lg bg-game-primary text-white font-medium">切换到离线 P2P 模式</button>
+                  <button type="button" onClick={() => switchMode('offline-p2p')} className="mt-3 w-full py-2 rounded-lg bg-game-primary text-white font-medium">切换到离线 P2P 模式</button>
                 </div>
               )}
               <div>
@@ -326,13 +339,13 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
             <>
               {showFrontendOnlyOfflineNotice && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm leading-relaxed">
-                  <div className="font-medium mb-1">前端-only 离线测试入口</div>
-                  <div>你当前没有配置后端地址。可以先用“新建离线房间”生成纯离线邀请，在第二台设备粘贴/打开邀请后生成 Player answer，再复制回 Host 当前页面导入。relay 一次扫码需要部署后端 /api/p2p；没有后端时会自动回退到复制粘贴流程。</div>
+                  <div className="font-medium mb-1">离线 P2P 已作为当前入口</div>
+                  <div>直接登录部署链接会优先进入离线 P2P。你可以新建 Host 邀请，让另一台设备扫码/打开链接；没有 relay 后端时会自动回退到复制 invite / answer 的纯离线流程。</div>
                 </div>
               )}
               <OfflineRoomInvite
                 role={offlineRole}
-                setRole={setOfflineRole}
+                setRole={switchOfflineRole}
                 isLoading={isLoading}
                 hostOffer={hostOffer}
                 hostInviteText={hostInviteText}
@@ -366,8 +379,37 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
           <h3 className="font-medium text-gray-800 mb-2">游戏规则</h3>
           <ul className="space-y-1"><li>• 2人轮流抽取卡牌并执行行动</li><li>• 四种行动：密约、取舍、赠予、竞争</li><li>• 控制艺伎或累计足够魅力值即可获胜</li><li>• 最多进行3局比赛</li></ul>
         </div>
-        <div className="mt-4 text-center text-xs text-gray-400">{mode === 'online' ? (isConnected ? '服务器已连接' : '服务器连接中...') : '离线 P2P：relay 只交换 offer/answer，不保存手牌、EngineState、eventLog 或游戏动作；同一 Wi-Fi / 手机热点优先'}</div>
+        <div className="mt-4 text-center text-xs text-gray-400">{mode === 'online' ? (isConnected ? '在线服务器：已连接' : '在线服务器：未连接') : '离线 P2P：游戏动作走点对点 DataChannel；同一 Wi-Fi / 手机热点优先'}</div>
       </div>
+    </div>
+  );
+};
+
+
+const ModeSummary: React.FC<{ mode: LobbyMode; isConnected: boolean; hasExplicitOnlineBackend: boolean }> = ({ mode, isConnected, hasExplicitOnlineBackend }) => {
+  const isOffline = mode === 'offline-p2p';
+  const badge = isOffline ? '当前入口' : (isConnected ? '服务器已连接' : '服务器未连接');
+  const badgeClass = isOffline
+    ? 'bg-green-100 text-green-700'
+    : isConnected
+      ? 'bg-blue-100 text-blue-700'
+      : 'bg-amber-100 text-amber-700';
+  const title = isOffline ? '离线 P2P 模式' : '在线服务器模式';
+  const description = isOffline
+    ? '适合部署登录链接默认进入：两台设备通过邀请链接/二维码交换连接信息，连接后游戏动作走点对点 DataChannel。'
+    : '适合已有稳定后端 Socket 服务的房间创建/加入流程；如果服务器未连接，可以随时切回离线 P2P。';
+  const backendHint = hasExplicitOnlineBackend
+    ? '已检测到后端地址，在线模式可手动切换使用。'
+    : '未配置后端地址，在线模式只作为备用入口显示。';
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 leading-relaxed">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium text-gray-900">当前模式：{title}</div>
+        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${badgeClass}`}>{badge}</span>
+      </div>
+      <div className="mt-1">{description}</div>
+      <div className="mt-1 text-xs text-gray-500">{backendHint}</div>
     </div>
   );
 };

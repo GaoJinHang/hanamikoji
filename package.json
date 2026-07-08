@@ -10,7 +10,7 @@
     "dev": "concurrently \"pnpm run dev:server\" \"pnpm run dev:client\"",
     "dev:server": "pnpm -C packages/server dev",
     "dev:client": "pnpm -C packages/client dev",
-    "build": "pnpm run build:core && pnpm run build:client",
+    "build": "pnpm run build:frontend",
     "build:core": "pnpm run build:shared && pnpm run build:engine && pnpm run build:p2p && pnpm run build:server",
     "build:shared": "pnpm -C packages/shared build",
     "build:engine": "pnpm -C packages/engine build",
@@ -26,7 +26,8 @@
     "test:engine": "pnpm -C packages/engine test",
     "test:server": "pnpm -C packages/server test",
     "build:p2p": "pnpm -C packages/p2p build",
-    "test:p2p": "pnpm -C packages/p2p test"
+    "test:p2p": "pnpm -C packages/p2p test",
+    "build:all": "pnpm run build:core && pnpm run build:client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

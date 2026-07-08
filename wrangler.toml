@@ -1,1 +1,2 @@
+name = "hanamikoji"
 pages_build_output_dir = "packages/client/dist"

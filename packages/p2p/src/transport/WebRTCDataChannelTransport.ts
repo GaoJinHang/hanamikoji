@@ -20,7 +20,7 @@ export interface WebRTCAcceptOfferOptions {
 
 const SIGNAL_KIND = 'hanamikoji-webrtc-signal' as const;
 const CHANNEL_LABEL = 'hanamikoji-p2p';
-const ICE_GATHERING_TIMEOUT_MS = 12000;
+const ICE_GATHERING_TIMEOUT_MS = 4000;
 
 /**
  * Browser WebRTC DataChannel endpoint for one remote peer.
@@ -208,10 +208,15 @@ function createPeerConnection(iceServers: RTCIceServer[] = []): RTCPeerConnectio
 
 async function waitForIceGatheringComplete(peerConnection: RTCPeerConnection): Promise<void> {
   if (peerConnection.iceGatheringState === 'complete') return;
-  await new Promise<void>((resolve, reject) => {
+
+  await new Promise<void>(resolve => {
     const timeoutId = globalThis.setTimeout(() => {
       cleanup();
-      reject(new Error('ICE 收集超时，请确认两台设备在同一 Wi-Fi 或热点内。'));
+      // Invite creation must not fail just because ICE gathering is slow or
+      // browser/network-specific. The current localDescription still contains
+      // the best offer/answer gathered so far; connection success can be
+      // handled after the invite is visible to the user.
+      resolve();
     }, ICE_GATHERING_TIMEOUT_MS);
 
     const cleanup = () => {

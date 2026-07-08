@@ -26,5 +26,5 @@ test('QRCode fallback state blocks single QR above hard limit', () => {
   assert.equal(state.length, 2501);
   assert.equal(state.warning, false);
   assert.equal(state.hardLimitExceeded, true);
-  assert.equal(state.message, '内容过长，已停止生成单个二维码。请使用复制文本，或优先使用 relay 一次扫码加入。');
+  assert.equal(state.message, '内容过长，二维码可能无法可靠生成；请使用复制文本。');
 });

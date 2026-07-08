@@ -64,11 +64,11 @@ export const QRCodeBox: React.FC<QRCodeBoxProps> = ({ title, value, copyLabel = 
       : '正在生成二维码；如果长时间无响应，请使用下面的手动复制文本。';
 
   return (
-    <div className={`rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-3 ${className}`}>
+    <div className={`rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-medium text-gray-800">{title}</div>
-          <div className="text-xs text-gray-500">内容长度：{fallbackState.length} 字符</div>
+          <div className="text-xs text-gray-500">长度：{fallbackState.length}</div>
         </div>
         <button type="button" onClick={copy} className="shrink-0 text-xs text-game-primary hover:underline">{copyLabel}</button>
       </div>
@@ -80,8 +80,8 @@ export const QRCodeBox: React.FC<QRCodeBoxProps> = ({ title, value, copyLabel = 
       )}
 
       {dataUrl && !failed && !fallbackState.hardLimitExceeded ? (
-        <div className="flex justify-center rounded-lg bg-white p-3">
-          <img src={dataUrl} alt={title} className="h-60 w-60" />
+        <div className="flex justify-center rounded-lg bg-white p-2 sm:p-3">
+          <img src={dataUrl} alt={title} className="h-44 w-44 sm:h-60 sm:w-60" />
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-gray-300 bg-white px-3 py-4 text-xs text-gray-600">
@@ -89,8 +89,8 @@ export const QRCodeBox: React.FC<QRCodeBoxProps> = ({ title, value, copyLabel = 
         </div>
       )}
 
-      <textarea readOnly value={value} className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg bg-white text-xs font-mono" />
-      <div className="text-xs text-gray-500 break-all">{preview}</div>
+      <textarea readOnly value={value} className="w-full h-16 sm:h-24 px-3 py-2 border border-gray-300 rounded-lg bg-white text-xs font-mono" />
+      <div className="hidden sm:block text-xs text-gray-500 break-all">{preview}</div>
     </div>
   );
 };
@@ -104,9 +104,9 @@ export function getQRCodeFallbackState(value: string): QRCodeFallbackState {
     warning,
     hardLimitExceeded,
     message: hardLimitExceeded
-      ? '内容过长，已停止生成单个二维码。请使用复制文本，或优先使用 relay 一次扫码加入。'
+      ? '内容过长，二维码可能无法可靠生成；请使用复制文本。'
       : warning
-        ? '二维码内容较长，可能难扫。建议复制文本，或使用 relay 一次扫码加入。'
+        ? '二维码内容较长，难扫时请复制文本。'
         : null,
   };
 }

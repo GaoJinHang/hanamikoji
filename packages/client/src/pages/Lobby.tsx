@@ -102,15 +102,15 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
       setOfflineRole('player');
       if (parsed.source === 'relay-invite') {
         setPlayerOfferInput(window.location.hash);
-        setStatus('已从 URL hash 读取 relay 一次扫码邀请。请填写昵称并点击“加入并提交 answer”。relay 只交换 offer/answer，不保存手牌、EngineState、eventLog 或游戏动作。');
+        setStatus('已读取扫码邀请。请填写昵称并点击“加入并生成 answer”。');
       } else {
         setPlayerOfferInput(parsed.signalText);
-        setStatus('已从 URL hash 读取纯离线邀请。请填写昵称并点击“生成 Player answer”；当前纯离线兜底仍需要 Host 当前页面粘贴 answer。');
+        setStatus('已读取离线邀请。请填写昵称并生成 answer。');
       }
     } else {
       setOfflineRole('host');
       setHostAnswerInput(parsed.signalText);
-      setStatus('已从 URL hash 读取 Player answer。请在当前 Host 页面创建/恢复本机 Host 快照后粘贴导入；新开标签页无法拿到原 RTCPeerConnection，当前 MVP 不承诺完整扫码恢复。');
+      setStatus('已读取 Player answer，请在 Host 页面导入。');
     }
     clearOfflineHash();
   }, []);
@@ -190,11 +190,11 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
       setHostRelayError(session.relayError ?? '');
       setOfflineLobbyView(session.getLobbyView());
       if (session.relayInviteId) {
-        setStatus(restoreLastHost ? '已读取本机 Host 快照并生成 relay 一次扫码邀请，正在等待 Player 提交 answer。relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作；relay 不等于公网穿透，同一 Wi-Fi / 手机热点是优先支持场景，跨运营商网络可能需要 STUN/TURN。' : '已新建离线房间并生成 relay 一次扫码邀请，正在等待 Player 提交 answer。relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作；relay 不等于公网穿透，同一 Wi-Fi / 手机热点是优先支持场景，跨运营商网络可能需要 STUN/TURN。');
+        setStatus(restoreLastHost ? '已恢复 Host 快照并生成邀请，等待 Player 提交 answer。' : '已生成邀请。请让 Player 扫码/打开链接；收到 answer 后会自动连接。');
       } else if (session.relayError) {
-        setStatus(`Relay 创建失败，已回退到纯离线长邀请；当前纯离线兜底仍需要 Host 当前页面粘贴 Player answer。原因：${session.relayError}`);
+        setStatus('已生成纯离线邀请。请把链接或 invite 发给 Player，再把 Player answer 粘贴回来。');
       } else {
-        setStatus(restoreLastHost ? '已读取本机 Host 快照并生成新的纯离线邀请；这不是恢复原 WebRTC 连接，请让 Player 重新生成 answer，并在 Host 当前页面粘贴导入。' : '已新建离线房间并生成纯离线邀请。Player 可以打开链接/扫码读取 Host invite；Host 当前页面仍需粘贴 Player answer。');
+        setStatus(restoreLastHost ? '已恢复 Host 快照并生成新邀请，请重新交换 answer。' : '已生成纯离线邀请。请把链接或 invite 发给 Player，再把 Player answer 粘贴回来。');
       }
     } catch (err) {
       setError(toFriendlyError(err));
@@ -218,7 +218,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
     try {
       await session.applyAnswer(hostAnswerInput);
       setOfflineLobbyView(session.getLobbyView());
-      setStatus('已导入 Player answer，正在连接。若长时间未连接，请确认两台设备在同一 Wi-Fi / 手机热点内；跨运营商网络可能需要 STUN/TURN。');
+      setStatus('已导入 Player answer，正在连接。');
     } catch (err) {
       setError(toFriendlyError(err));
     } finally {
@@ -258,7 +258,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
       setPlayerAnswerUrl(session.answerUrl);
       setPlayerRelaySubmitted(Boolean(session.relayAnswerSubmitted));
       setOfflineLobbyView(session.getLobbyView());
-      setStatus(session.relayAnswerSubmitted ? '已通过 relay 提交 answer，等待 Host 当前页面自动建立连接。relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作；relay 不等于公网穿透，同一 Wi-Fi / 手机热点是优先支持场景，跨运营商网络可能需要 STUN/TURN。' : 'Player answer 已生成。当前纯离线兜底需要复制回 Host 当前页面粘贴导入，连接后进入 Ready 房间。');
+      setStatus(session.relayAnswerSubmitted ? 'answer 已通过 relay 提交，等待 Host 自动连接。' : 'answer 已生成。请复制给 Host 导入。');
     } catch (err) {
       setError(toFriendlyError(err));
     } finally {
@@ -298,16 +298,15 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
     hasExplicitBackend: hasExplicitOnlineBackend,
     isConnected,
   });
-  const showFrontendOnlyOfflineNotice = import.meta.env.PROD && !hasExplicitOnlineBackend;
 
   return (
-    <div className="min-h-screen bg-game-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-game-bg flex items-start justify-center p-3 sm:p-4 sm:items-center">
       <div className="max-w-2xl w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-serif text-game-primary mb-2">花见小路</h1>
+        <div className="text-center mb-4 sm:mb-8">
+          <h1 className="text-3xl sm:text-4xl font-serif text-game-primary mb-1 sm:mb-2">花见小路</h1>
           <p className="text-gray-500">双人卡牌对战</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 space-y-3 sm:space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
             <button type="button" onClick={() => switchMode('offline-p2p')} className={`py-2 rounded-lg text-sm font-medium ${mode === 'offline-p2p' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>离线 P2P 模式</button>
             <button type="button" onClick={() => switchMode('online')} className={`py-2 rounded-lg text-sm font-medium ${mode === 'online' ? 'bg-white shadow text-game-primary' : 'text-gray-600'}`}>在线服务器模式</button>
@@ -337,12 +336,6 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
             </>
           ) : (
             <>
-              {showFrontendOnlyOfflineNotice && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm leading-relaxed">
-                  <div className="font-medium mb-1">离线 P2P 已作为当前入口</div>
-                  <div>直接登录部署链接会优先进入离线 P2P。你可以新建 Host 邀请，让另一台设备扫码/打开链接；没有 relay 后端时会自动回退到复制 invite / answer 的纯离线流程。</div>
-                </div>
-              )}
               <OfflineRoomInvite
                 role={offlineRole}
                 setRole={switchOfflineRole}
@@ -372,14 +365,19 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
             </>
           )}
           {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
-          {roomCode.trim() && status && <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm"><div className="font-medium">房间号：<span className="font-mono">{roomCode}</span></div><div className="mt-1">{status}</div></div>}
+          {status && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+              {roomCode.trim() && <div className="font-medium">房间号：<span className="font-mono">{roomCode}</span></div>}
+              <div className={roomCode.trim() ? 'mt-1' : ''}>{status}</div>
+            </div>
+          )}
           {roomCode.trim() && !status && savedRoomId && mode === 'online' && <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 text-sm"><div className="font-medium">房间号：<span className="font-mono">{roomCode}</span></div></div>}
         </div>
-        <div className="mt-8 bg-white/50 rounded-xl p-4 text-sm text-gray-600">
-          <h3 className="font-medium text-gray-800 mb-2">游戏规则</h3>
-          <ul className="space-y-1"><li>• 2人轮流抽取卡牌并执行行动</li><li>• 四种行动：密约、取舍、赠予、竞争</li><li>• 控制艺伎或累计足够魅力值即可获胜</li><li>• 最多进行3局比赛</li></ul>
-        </div>
-        <div className="mt-4 text-center text-xs text-gray-400">{mode === 'online' ? (isConnected ? '在线服务器：已连接' : '在线服务器：未连接') : '离线 P2P：游戏动作走点对点 DataChannel；同一 Wi-Fi / 手机热点优先'}</div>
+        <details className="mt-4 sm:mt-8 bg-white/50 rounded-xl p-3 sm:p-4 text-sm text-gray-600">
+          <summary className="cursor-pointer font-medium text-gray-800">游戏规则</summary>
+          <ul className="mt-2 space-y-1"><li>• 2人轮流抽取卡牌并执行行动</li><li>• 四种行动：密约、取舍、赠予、竞争</li><li>• 控制艺伎或累计足够魅力值即可获胜</li><li>• 最多进行3局比赛</li></ul>
+        </details>
+        <div className="mt-3 sm:mt-4 text-center text-xs text-gray-400">{mode === 'online' ? (isConnected ? '在线服务器：已连接' : '在线服务器：未连接') : '离线 P2P：不依赖游戏后端保存状态'}</div>
       </div>
     </div>
   );
@@ -388,35 +386,33 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
 
 const ModeSummary: React.FC<{ mode: LobbyMode; isConnected: boolean; hasExplicitOnlineBackend: boolean }> = ({ mode, isConnected, hasExplicitOnlineBackend }) => {
   const isOffline = mode === 'offline-p2p';
-  const badge = isOffline ? '当前入口' : (isConnected ? '服务器已连接' : '服务器未连接');
+  const badge = isOffline ? '当前入口' : (isConnected ? '已连接' : '未连接');
   const badgeClass = isOffline
     ? 'bg-green-100 text-green-700'
     : isConnected
       ? 'bg-blue-100 text-blue-700'
       : 'bg-amber-100 text-amber-700';
-  const title = isOffline ? '离线 P2P 模式' : '在线服务器模式';
-  const description = isOffline
-    ? '适合部署登录链接默认进入：两台设备通过邀请链接/二维码交换连接信息，连接后游戏动作走点对点 DataChannel。'
-    : '适合已有稳定后端 Socket 服务的房间创建/加入流程；如果服务器未连接，可以随时切回离线 P2P。';
-  const backendHint = hasExplicitOnlineBackend
-    ? '已检测到后端地址，在线模式可手动切换使用。'
-    : '未配置后端地址，在线模式只作为备用入口显示。';
+  const title = isOffline ? '离线 P2P' : '在线服务器';
+  const hint = isOffline
+    ? '不是“无网络”：只是不依赖游戏后端保存状态。先创建邀请，再让另一台设备扫码或复制加入。'
+    : '需要后端 Socket 服务；服务器不可用时请切回离线 P2P。';
+  const backendHint = hasExplicitOnlineBackend ? '后端地址已配置，可手动切换在线模式。' : '未配置后端地址。';
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 leading-relaxed">
+    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs sm:text-sm text-gray-700">
       <div className="flex items-center justify-between gap-3">
         <div className="font-medium text-gray-900">当前模式：{title}</div>
         <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${badgeClass}`}>{badge}</span>
       </div>
-      <div className="mt-1">{description}</div>
-      <div className="mt-1 text-xs text-gray-500">{backendHint}</div>
+      <div className="mt-1">{hint}</div>
+      {!isOffline && <div className="mt-1 text-xs text-gray-500">{backendHint}</div>}
     </div>
   );
 };
 
 function toFriendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : '离线 P2P 操作失败';
-  if (message.includes('ICE') || message.includes('DataChannel') || message.includes('WebRTC')) return `${message} relay 不等于公网穿透；请优先让两台设备处于同一 Wi-Fi / 手机热点，跨运营商网络可能需要 STUN/TURN。当前断线后需要重新交换 offer/answer，完整扫码恢复不是当前 MVP 承诺。`;
+  if (message.includes('ICE') || message.includes('DataChannel') || message.includes('WebRTC')) return `${message} 请优先使用同一 Wi-Fi 或手机热点。`;
   if (message.includes('INVITE_NOT_FOUND') || message.includes('invite 不存在') || message.includes('邀请已过期')) return '邀请已过期，请重新创建离线房间。';
   return message;
 }

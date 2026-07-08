@@ -39,6 +39,8 @@ export interface RelayInviteFallbackResult {
   error: Error | null;
 }
 
+const DEFAULT_RELAY_CREATE_TIMEOUT_MS = 2500;
+
 export interface AnswerPollingController {
   stop(): void;
 }
@@ -108,7 +110,7 @@ export async function createRelayInviteOrFallback(
   createFn: (nextInput: CreateRelayInviteInput) => Promise<CreateRelayInviteResult> = createInvite,
 ): Promise<RelayInviteFallbackResult> {
   try {
-    const relay = await createFn(input);
+    const relay = await withTimeout(createFn(input), DEFAULT_RELAY_CREATE_TIMEOUT_MS);
     return { relay, joinUrl: relay.joinUrl, error: null };
   } catch (error) {
     return { relay: null, joinUrl: fallbackJoinUrl, error: toError(error) };
@@ -205,6 +207,22 @@ export function buildApiUrl(path: string, baseUrl = getApiBaseUrl()): string {
 function getApiBaseUrl(): string {
   const env = import.meta.env?.VITE_API_BASE_URL?.trim();
   return env ?? '';
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('signaling relay 请求超时，已改用纯离线邀请。'));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {

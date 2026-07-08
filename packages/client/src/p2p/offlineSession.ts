@@ -120,7 +120,7 @@ export async function createHostOfflineSession(
   }
 
   const hostRuntime = new HostRuntime({ endpoint: switchboard, snapshot });
-  let connectionStatus = options.restoreLastHost && snapshot ? '已读取本机 Host 快照，正在生成新的 offer/answer 交换邀请。' : '正在创建新的离线 Host 房间。';
+  let connectionStatus = options.restoreLastHost && snapshot ? '已读取 Host 快照，正在生成邀请。' : '正在创建离线房间。';
   let connection: OfflineP2PConnection | null = null;
   let controllerDisposed = false;
   let answerPolling: AnswerPollingController | null = null;
@@ -171,14 +171,14 @@ export async function createHostOfflineSession(
     hostRuntime.on('snapshotChanged', (nextSnapshot: HostRuntimeSnapshot) => saveHostSnapshot(nextSnapshot)),
     hostRuntime.on('peerJoined', player => setSessionStatus(`玩家 ${player.name} 已加入，等待双方 Ready。`)),
     hostRuntime.on('peerReconnected', player => setSessionStatus(`玩家 ${player.name} 已恢复 DataChannel 连接。`)),
-    hostRuntime.on('peerDisconnected', player => setSessionStatus(`玩家 ${player.name} 已断开；当前 MVP 需要重新交换 offer/answer，完整扫码恢复不是承诺。`)),
+    hostRuntime.on('peerDisconnected', player => setSessionStatus(`玩家 ${player.name} 已断开，请重新交换连接信息。`)),
     hostRuntime.on('lobbyState', notifyLobby),
   ];
 
   bindClientRuntime(clientRuntime, 'host', callbacks, hostRuntime.roomId, ensureConnection, notifyLobby, setSessionStatus);
   clientRuntime.join({ requestedRoomId: hostRuntime.roomId, requestedPlayerId: resume?.playerId ?? 'p1', reconnectToken: resume?.reconnectToken });
 
-  setSessionStatus('正在生成 Host offer，请把 relay 链接或纯离线邀请文本交给另一台设备。');
+  setSessionStatus('正在生成离线邀请...');
   const { endpoint: rtcEndpoint, signal } = await WebRTCDataChannelEndpoint.createOffer({
     hostPeerId,
     remotePeerId,
@@ -207,7 +207,7 @@ export async function createHostOfflineSession(
 
   switchboard.addRoute(remotePeerId, rtcEndpoint);
   rtcEndpoint.onReconnect(() => setSessionStatus('DataChannel 已连接，等待 Player 加入或双方 Ready。'));
-  rtcEndpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开。当前 MVP 需要重新创建/恢复本机房间并重新交换 offer/answer；完整扫码恢复不是承诺。'));
+  rtcEndpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开，请重新创建/恢复房间并交换连接信息。'));
 
   const applyAnswerText = async (answerText: string, relayPlayerName?: string) => {
     const answerSignal = await readPlayerAnswerSignal(answerText, hostRuntime.roomId);
@@ -224,10 +224,10 @@ export async function createHostOfflineSession(
       },
       onError: error => callbacks.onError(`Relay 轮询失败：${error.message}。可继续使用手动 answer 兜底。`),
     });
-    setSessionStatus('已生成 relay 一次扫码加入链接。relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作；relay 不等于公网穿透。同一 Wi-Fi / 手机热点是优先支持场景，跨运营商网络可能需要 STUN/TURN。正在等待 Player 提交 answer。');
+    setSessionStatus('已生成扫码邀请，等待 Player 提交 answer。');
   } else {
     const reason = relayResult.error?.message ? `（relay 不可用：${relayResult.error.message}）` : '';
-    setSessionStatus(`Relay 创建失败，已自动回退到纯离线长邀请链接/复制文本；当前纯离线兜底仍需要 Host 当前页面粘贴 Player answer。${reason}`);
+    setSessionStatus(`已生成纯离线邀请，请发送链接或 invite，并等待 Player answer。${reason}`);
   }
 
   return {
@@ -305,7 +305,7 @@ export async function createPlayerOfflineSession(
   };
 
   endpoint.onReconnect(() => setSessionStatus('DataChannel 已连接，已自动发送 JOIN_REQUEST，等待双方 Ready。'));
-  endpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开。当前 MVP 需要重新交换 offer/answer；完整扫码恢复不是承诺。'));
+  endpoint.onDisconnect(() => setSessionStatus('DataChannel 已断开，请重新交换连接信息。'));
 
   bindClientRuntime(clientRuntime, 'player', callbacks, offer.roomId, ensureConnection, notifyLobby, setSessionStatus);
   clientRuntime.join({
@@ -333,13 +333,13 @@ export async function createPlayerOfflineSession(
     try {
       await submitAnswer(hostInvite.relayInviteId, { playerName, answer: answerInviteText });
       relayAnswerSubmitted = true;
-      setSessionStatus('已通过 signaling relay 提交 answer，等待 Host 当前页面自动建立连接。relay 只交换连接信息（offer/answer），不保存手牌、EngineState、eventLog 或游戏动作；relay 不等于公网穿透。同一 Wi-Fi / 手机热点是优先支持场景，跨运营商网络可能需要 STUN/TURN。连接建立后请在 Ready 房间准备。');
+      setSessionStatus('answer 已通过 relay 提交，等待 Host 自动连接。');
     } catch (error) {
-      callbacks.onError(`Relay 提交 answer 失败：${error instanceof Error ? error.message : '未知错误'}。请复制下面的 answer 文本给 Host 手动导入。`);
-      setSessionStatus('Player answer 已生成，但 relay 不可用。请复制 answer 文本回到 Host 当前页面粘贴导入。');
+      callbacks.onError(`Relay 提交 answer 失败：${error instanceof Error ? error.message : '未知错误'}。请复制 answer 给 Host。`);
+      setSessionStatus('answer 已生成，请复制给 Host 导入。');
     }
   } else {
-    setSessionStatus('Player answer 已生成。当前纯离线兜底需要复制 answer 文本回到 Host 当前页面粘贴导入。');
+    setSessionStatus('answer 已生成，请复制给 Host 导入。');
   }
 
   return {

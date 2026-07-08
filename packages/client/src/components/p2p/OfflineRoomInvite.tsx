@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { OfflineClientSessionSnapshot } from '../../p2p/storage';
 import { QRCodeBox } from './QRCodeBox';
 
@@ -51,8 +51,8 @@ export const OfflineRoomInvite: React.FC<OfflineRoomInviteProps> = props => (
 const OfflineQuickHint: React.FC<{ role: OfflineInviteRole }> = ({ role }) => (
   <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
     {role === 'host'
-      ? '点“新建离线房间”后，下方会出现二维码、链接和 invite 文本。'
-      : '扫码或粘贴 Host invite 后生成 answer；relay 可用时会自动回传给 Host。'}
+      ? '点“新建离线房间”后，下方会出现二维码、链接和 invite 文本；完整内容在弹窗里查看。'
+      : '扫码或粘贴 Host invite 后生成 answer；relay 可用时会自动回传给 Host，手动 answer 也可在弹窗里复制。'}
     <details className="mt-1">
       <summary className="cursor-pointer text-blue-700">离线 P2P 是什么？</summary>
       <div className="mt-1 text-blue-700">
@@ -62,43 +62,70 @@ const OfflineQuickHint: React.FC<{ role: OfflineInviteRole }> = ({ role }) => (
   </div>
 );
 
-const HostInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
-  <div className="space-y-3">
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-      <button type="button" onClick={props.onCreateNewHost} disabled={props.isLoading} className={`w-full py-3 rounded-xl font-medium ${props.isLoading ? 'bg-gray-300 text-gray-500' : 'bg-game-primary text-white'}`}>{props.isLoading ? '正在生成...' : '新建离线房间'}</button>
-      <button type="button" onClick={props.onRestoreHost} disabled={props.isLoading || !props.hasHostSnapshot} className={`w-full py-3 rounded-xl font-medium ${props.isLoading || !props.hasHostSnapshot ? 'bg-gray-300 text-gray-500' : 'bg-game-secondary text-white'}`}>恢复 Host 快照</button>
-    </div>
+const HostInvitePanel: React.FC<OfflineRoomInviteProps> = props => {
+  const hasActiveHostSession = Boolean(props.hostOffer);
+  const hasHostAnswer = Boolean(props.hostAnswerInput.trim());
+  const shouldShowAnswerImport = hasActiveHostSession || hasHostAnswer;
+  const canApplyAnswer = hasActiveHostSession && hasHostAnswer && !props.isLoading;
+  const inactiveAnswerHint = props.hasHostSnapshot
+    ? '已读取 Player answer，但当前页面还没有活跃 Host 连接。请先点击上方“恢复 Host 快照”；恢复时 answer 会保留，然后再导入。'
+    : '已读取 Player answer，但当前页面还没有活跃 Host 连接。请回到原 Host 设备/标签页，或先恢复对应 Host 快照后再导入。';
 
-    {props.hostRelayInviteId && (
-      <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
-        relay 已开启：invite <span className="font-mono">{props.hostRelayInviteId}</span>。等待 Player 提交 answer。
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button type="button" onClick={props.onCreateNewHost} disabled={props.isLoading} className={`w-full py-3 rounded-xl font-medium ${props.isLoading ? 'bg-gray-300 text-gray-500' : 'bg-game-primary text-white'}`}>{props.isLoading ? '正在生成...' : '新建离线房间'}</button>
+        <button type="button" onClick={props.onRestoreHost} disabled={props.isLoading || !props.hasHostSnapshot} className={`w-full py-3 rounded-xl font-medium ${props.isLoading || !props.hasHostSnapshot ? 'bg-gray-300 text-gray-500' : 'bg-game-secondary text-white'}`}>恢复 Host 快照</button>
       </div>
-    )}
-    {props.hostRelayError && (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        relay 不可用，已改用纯离线邀请。把链接或 invite 发给 Player，再粘贴 Player answer。
-      </div>
-    )}
 
-    {props.hostJoinUrl && <QRCodeBox title={props.hostRelayInviteId ? '给 Player 扫码/打开' : '给 Player 的离线链接'} value={props.hostJoinUrl} copyLabel="复制链接" onCopy={props.onCopy} />}
-    {props.hostInviteText && <SignalBox label="invite 文本" value={props.hostInviteText} onCopy={() => props.onCopy(props.hostInviteText)} />}
-    {props.hostOffer && (
-      <details className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <summary className="cursor-pointer text-sm font-medium text-gray-700">高级：旧版 Host offer</summary>
-        <div className="mt-3">
-          <SignalBox label="Host offer" value={props.hostOffer} onCopy={() => props.onCopy(props.hostOffer)} />
+      {props.hostRelayInviteId && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+          relay 已开启：invite <span className="font-mono">{props.hostRelayInviteId}</span>。等待 Player 提交 answer。
         </div>
-      </details>
-    )}
-    {props.hostOffer && (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">粘贴 Player answer</label>
-        <textarea value={props.hostAnswerInput} onChange={event => props.setHostAnswerInput(event.target.value)} placeholder="relay 不可用时，把 Player 设备生成的 answer 粘贴到这里。" className="w-full h-20 sm:h-28 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none" />
-        <button type="button" onClick={props.onApplyAnswer} disabled={props.isLoading || !props.hostAnswerInput.trim()} className={`mt-2 w-full py-3 rounded-xl font-medium ${props.isLoading || !props.hostAnswerInput.trim() ? 'bg-gray-300 text-gray-500' : 'bg-game-secondary text-white'}`}>导入 answer 并连接</button>
-      </div>
-    )}
-  </div>
-);
+      )}
+      {props.hostRelayError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          relay 不可用，已改用纯离线邀请。把链接或 invite 发给 Player，再粘贴 Player answer。
+        </div>
+      )}
+
+      {props.hostJoinUrl && <QRCodeBox title={props.hostRelayInviteId ? '给 Player 扫码/打开' : '给 Player 的离线链接'} value={props.hostJoinUrl} copyLabel="复制链接" onCopy={props.onCopy} />}
+      {props.hostInviteText && <SignalBox label="invite 文本" value={props.hostInviteText} copyLabel="复制 invite" onCopy={() => props.onCopy(props.hostInviteText)} />}
+      {props.hostOffer && (
+        <details className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-gray-700">高级：旧版 Host offer</summary>
+          <div className="mt-3">
+            <SignalBox label="Host offer" value={props.hostOffer} copyLabel="复制 offer" onCopy={() => props.onCopy(props.hostOffer)} />
+          </div>
+        </details>
+      )}
+      {shouldShowAnswerImport && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label className="block text-sm font-medium text-gray-700">粘贴 Player answer</label>
+            {!hasActiveHostSession && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-700">需先恢复 Host</span>}
+          </div>
+          {!hasActiveHostSession && hasHostAnswer && (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{inactiveAnswerHint}</div>
+          )}
+          {hasActiveHostSession && (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              relay 自动回传失败或不可用时，把 Player 生成的 answer 粘贴到这里再导入。
+            </div>
+          )}
+          <textarea
+            value={props.hostAnswerInput}
+            onChange={event => props.setHostAnswerInput(event.target.value)}
+            placeholder={hasActiveHostSession ? '粘贴 Player 设备生成的 answer。' : '已从链接读取到的 Player answer 会显示在这里。'}
+            disabled={props.isLoading}
+            className="w-full h-24 sm:h-32 px-3 py-2 border border-gray-300 rounded-xl bg-white text-xs font-mono focus:ring-2 focus:ring-game-primary focus:border-transparent outline-none"
+          />
+          <button type="button" onClick={props.onApplyAnswer} disabled={!canApplyAnswer} className={`mt-2 w-full py-3 rounded-xl font-medium ${!canApplyAnswer ? 'bg-gray-300 text-gray-500' : 'bg-game-secondary text-white'}`}>{hasActiveHostSession ? '导入 answer 并连接' : '先恢复 Host 快照'}</button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PlayerInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
   <div className="space-y-3">
@@ -113,24 +140,89 @@ const PlayerInvitePanel: React.FC<OfflineRoomInviteProps> = props => (
       </div>
     )}
     {props.playerAnswerInviteText && <QRCodeBox title={props.playerRelaySubmitted ? 'answer 兜底文本' : '复制给 Host 的 answer'} value={props.playerAnswerInviteText} copyLabel="复制 answer" onCopy={props.onCopy} />}
-    {props.playerAnswerUrl && <SignalBox label="answer URL" value={props.playerAnswerUrl} onCopy={() => props.onCopy(props.playerAnswerUrl)} />}
+    {props.playerAnswerUrl && <SignalBox label="answer URL" value={props.playerAnswerUrl} copyLabel="复制 URL" onCopy={() => props.onCopy(props.playerAnswerUrl)} />}
     {props.playerAnswer && (
       <details className="rounded-xl border border-gray-200 bg-gray-50 p-3">
         <summary className="cursor-pointer text-sm font-medium text-gray-700">高级：旧版 Player answer</summary>
         <div className="mt-3">
-          <SignalBox label="Player answer" value={props.playerAnswer} onCopy={() => props.onCopy(props.playerAnswer)} />
+          <SignalBox label="Player answer" value={props.playerAnswer} copyLabel="复制 answer" onCopy={() => props.onCopy(props.playerAnswer)} />
         </div>
       </details>
     )}
   </div>
 );
 
-const SignalBox: React.FC<{ label: string; value: string; onCopy: () => void }> = ({ label, value, onCopy }) => (
-  <div>
-    <div className="flex items-center justify-between mb-2">
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
-      <button type="button" onClick={onCopy} className="text-xs text-game-primary hover:underline">复制</button>
+const SignalBox: React.FC<{ label: string; value: string; copyLabel?: string; onCopy: () => void }> = ({ label, value, copyLabel = '复制', onCopy }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const preview = useMemo(() => compactSignalPreview(value), [value]);
+
+  return (
+    <>
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-700">{label}</div>
+            <div className="text-xs text-gray-500">长度：{value.length}</div>
+          </div>
+          <button type="button" onClick={onCopy} className="shrink-0 text-xs text-game-primary hover:underline">{copyLabel}</button>
+        </div>
+        <div className="mt-2 max-h-16 overflow-hidden break-all rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs leading-relaxed text-gray-700">
+          {preview}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onCopy} className="rounded-lg border border-game-primary/30 px-3 py-2 text-xs font-medium text-game-primary">{copyLabel}</button>
+          <button type="button" onClick={() => setIsOpen(true)} className="rounded-lg bg-game-primary px-3 py-2 text-xs font-medium text-white">查看完整文本</button>
+        </div>
+      </div>
+      {isOpen && (
+        <SignalTextModal
+          label={label}
+          value={value}
+          copyLabel={copyLabel}
+          onCopy={onCopy}
+          onClose={() => setIsOpen(false)}
+        />
+      )}
+    </>
+  );
+};
+
+const SignalTextModal: React.FC<{ label: string; value: string; copyLabel: string; onCopy: () => void; onClose: () => void }> = ({ label, value, copyLabel, onCopy, onClose }) => {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`${label}完整文本`} onClick={onClose}>
+      <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl sm:p-5" onClick={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-gray-900">{label}</div>
+            <div className="text-xs text-gray-500">长度：{value.length}</div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500 hover:bg-gray-100">关闭</button>
+        </div>
+        <div className="mt-4">
+          <textarea
+            readOnly
+            value={value}
+            onFocus={event => event.currentTarget.select()}
+            className="h-72 max-h-[60dvh] w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-game-primary"
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onCopy} className="rounded-xl bg-game-primary py-3 text-sm font-medium text-white">{copyLabel}</button>
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700">完成</button>
+        </div>
+      </div>
     </div>
-    <textarea readOnly value={value} className="w-full h-20 sm:h-28 px-3 py-2 border border-gray-300 rounded-xl bg-gray-50 text-xs font-mono" />
-  </div>
-);
+  );
+};
+
+function compactSignalPreview(value: string): string {
+  return value.length > 320 ? `${value.slice(0, 320)}...` : value;
+}

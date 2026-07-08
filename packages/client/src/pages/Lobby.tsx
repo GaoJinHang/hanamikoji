@@ -169,6 +169,8 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
       setError('请输入您的名称');
       return;
     }
+    const pendingHostAnswer = restoreLastHost ? hostAnswerInput : '';
+    const hasPendingHostAnswer = Boolean(pendingHostAnswer.trim());
     setIsLoading(true);
     resetOfflineOutputs();
     resetMessages();
@@ -188,8 +190,11 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
       setHostJoinUrl(session.joinUrl);
       setHostRelayInviteId(session.relayInviteId ?? '');
       setHostRelayError(session.relayError ?? '');
+      if (hasPendingHostAnswer) setHostAnswerInput(pendingHostAnswer);
       setOfflineLobbyView(session.getLobbyView());
-      if (session.relayInviteId) {
+      if (hasPendingHostAnswer) {
+        setStatus('已恢复 Host 快照并保留 Player answer，请点击“导入 answer 并连接”。');
+      } else if (session.relayInviteId) {
         setStatus(restoreLastHost ? '已恢复 Host 快照并生成邀请，等待 Player 提交 answer。' : '已生成邀请。请让 Player 扫码/打开链接；收到 answer 后会自动连接。');
       } else if (session.relayError) {
         setStatus('已生成纯离线邀请。请把链接或 invite 发给 Player，再把 Player answer 粘贴回来。');
@@ -300,7 +305,7 @@ export const Lobby: React.FC<LobbyProps> = ({ savedRoomId, savedPlayerId, onOffl
   });
 
   return (
-    <div className="min-h-screen bg-game-bg flex items-start justify-center p-3 sm:p-4 sm:items-center">
+    <div className="min-h-screen bg-game-bg flex items-start justify-center p-3 py-4 sm:p-4 sm:py-8">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-4 sm:mb-8">
           <h1 className="text-3xl sm:text-4xl font-serif text-game-primary mb-1 sm:mb-2">花见小路</h1>

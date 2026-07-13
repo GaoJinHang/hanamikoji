@@ -5,7 +5,6 @@
 export * from './types';
 export * from './cards';
 export * from './gameRules';
-export * from './playerView';
 
 export {
   MAX_ROUNDS,

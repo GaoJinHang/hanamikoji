@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { GameState } from '@hanamikoji/shared';
-import { createPlayerView } from '@hanamikoji/shared';
+import { createPlayerView } from '../src/game/playerView';
 
 function createState(): GameState {
   return {

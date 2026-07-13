@@ -28,27 +28,13 @@
       ],
       "@hanamikoji/shared/*": [
         "../shared/src/*"
-      ],
-      "@hanamikoji/p2p": [
-        "../p2p/src/index.ts"
-      ],
-      "@hanamikoji/p2p/*": [
-        "../p2p/src/*"
-      ],
-      "@hanamikoji/engine": [
-        "../engine/src/index.ts"
-      ],
-      "@hanamikoji/engine/*": [
-        "../engine/src/*"
       ]
     }
   },
   "include": [
     "src/**/*",
     "vite.config.ts",
-    "../shared/src/**/*",
-    "../p2p/src/**/*",
-    "../engine/src/**/*"
+    "../shared/src/**/*"
   ],
   "exclude": [
     "node_modules"

@@ -3,12 +3,10 @@
  * 根据游戏状态显示大厅或游戏页面。
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { SocketProvider, useSocketContext } from './context/SocketContext';
+import React, { useEffect, useState } from 'react';
+import { SocketProvider } from './context/SocketContext';
 import { Lobby } from './pages/Lobby';
 import { Game } from './pages/Game';
-import { OnlineSocketConnection } from './connection';
-import type { GameConnection, OfflineP2PConnection } from './connection';
 import type { GameState, PlayerId } from '@hanamikoji/shared';
 
 const STORAGE_KEYS = {
@@ -25,46 +23,24 @@ function AppContent() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<PlayerId | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [offlineConnection, setOfflineConnection] = useState<OfflineP2PConnection | null>(null);
-  const [, setOfflineRenderTick] = useState(0);
-  const { socket, isConnected } = useSocketContext();
 
-  const handleGameStart = useCallback((state: GameState, pid: PlayerId, rid: string, token: string) => {
-    offlineConnection?.leaveRoom();
-    setOfflineConnection(null);
+  const handleGameStart = (state: GameState, pid: PlayerId, rid: string, token: string) => {
     setGameState(state);
     setPlayerId(pid);
     setRoomId(rid);
     localStorage.setItem(STORAGE_KEYS.roomId, rid);
     localStorage.setItem(STORAGE_KEYS.playerId, pid);
     localStorage.setItem(STORAGE_KEYS.reconnectToken, token);
-  }, [offlineConnection]);
+  };
 
-  const handleLeaveGame = useCallback(() => {
-    offlineConnection?.leaveRoom();
-    setOfflineConnection(null);
+  const handleLeaveGame = () => {
     setGameState(null);
     setPlayerId(null);
     setRoomId(null);
     localStorage.removeItem(STORAGE_KEYS.roomId);
     localStorage.removeItem(STORAGE_KEYS.playerId);
     localStorage.removeItem(STORAGE_KEYS.reconnectToken);
-  }, [offlineConnection]);
-
-  const handleOfflineGameReady = useCallback((connection: OfflineP2PConnection) => {
-    setGameState(null);
-    setPlayerId(null);
-    setRoomId(connection.gameState.roomId);
-    setOfflineConnection(previous => {
-      previous?.dispose();
-      return connection;
-    });
-    setOfflineRenderTick(tick => tick + 1);
-  }, []);
-
-  const handleOfflineStateChanged = useCallback(() => {
-    setOfflineRenderTick(tick => tick + 1);
-  }, []);
+  };
 
   useEffect(() => {
     const savedRoomId = localStorage.getItem(STORAGE_KEYS.roomId);
@@ -97,31 +73,13 @@ function AppContent() {
       window.removeEventListener('hanamikoji_gameStarted', onGameStarted);
       window.removeEventListener('hanamikoji_gameStateUpdate', onGameStateUpdate);
     };
-  }, [handleGameStart]);
+  }, []);
 
-  const onlineConnection = useMemo(() => {
-    if (offlineConnection || !socket || !gameState || !playerId) return null;
-    return new OnlineSocketConnection(socket, {
-      gameState,
-      playerId,
-      isConnected,
-    });
-  }, [offlineConnection, socket, gameState, playerId, isConnected]);
-
-  const gameConnection: GameConnection | null = offlineConnection ?? onlineConnection;
-
-  if (gameConnection) {
-    return <Game connection={gameConnection} onLeave={handleLeaveGame} />;
+  if (gameState && playerId) {
+    return <Game gameState={gameState} playerId={playerId} onLeave={handleLeaveGame} />;
   }
 
-  return (
-    <Lobby
-      savedRoomId={roomId}
-      savedPlayerId={playerId}
-      onOfflineGameReady={handleOfflineGameReady}
-      onOfflineStateChanged={handleOfflineStateChanged}
-    />
-  );
+  return <Lobby savedRoomId={roomId} savedPlayerId={playerId} />;
 }
 
 function App() {

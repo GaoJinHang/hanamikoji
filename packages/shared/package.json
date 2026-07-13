@@ -33,11 +33,6 @@
       "import": "./dist/gameData.js",
       "require": "./dist/gameData.cjs",
       "types": "./dist/gameData.d.ts"
-    },
-    "./playerView": {
-      "import": "./dist/playerView.js",
-      "require": "./dist/playerView.cjs",
-      "types": "./dist/playerView.d.ts"
     }
   },
   "scripts": {

@@ -14,7 +14,6 @@ import { setupSocket } from './socket';
 import { ClientToServerEvents, ServerToClientEvents } from '@hanamikoji/shared';
 import path from 'path';
 import fs from 'fs';
-import { createSignalingRouter } from './signaling';
 
 const app = express();
 const httpServer = createServer(app);
@@ -61,27 +60,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 // 设置 Socket.io 事件处理
 setupSocket(io);
 
-// REST API CORS。Socket.io 仍使用自己的 CORS 配置；这里覆盖 /api 等 Express REST 请求。
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-
-  if (req.method === 'OPTIONS') {
-    res.status(204).send();
-    return;
-  }
-
-  next();
-});
-
-// 中间件：解析 JSON。signaling relay 会进一步限制 offer/answer 字符串长度。
-app.use(express.json({ limit: '300kb' }));
+// 中间件：解析 JSON
+app.use(express.json());
 
 // 健康检查端点
 app.get('/health', (_req, res) => {
@@ -91,9 +71,6 @@ app.get('/health', (_req, res) => {
     service: 'hanamikoji-server',
   });
 });
-
-// 轻量 P2P signaling relay：只交换一次 WebRTC 连接信息，不参与游戏规则或动作。
-app.use('/api/p2p', createSignalingRouter());
 
 // API 端点：获取房间列表（调试用）
 app.get('/api/rooms', (_req, res) => {

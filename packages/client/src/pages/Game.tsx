@@ -4,8 +4,9 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSocket } from '../hooks';
 import { ACTION_CONFIG, MAX_ROUNDS, getCardDetails } from '@hanamikoji/shared';
-import type { ActionType, GameOverPayload, ItemCard, PendingAction } from '@hanamikoji/shared';
+import type { ActionType, GameOverPayload, GameState as GameStateType, ItemCard, PendingAction, PlayerId } from '@hanamikoji/shared';
 import { Header } from '../components/layout/Header';
 import { GeishaGrid } from '../components/geisha/GeishaGrid';
 import { ActionPanel } from '../components/action/ActionPanel';
@@ -14,15 +15,15 @@ import { GameOverModal } from '../components/modal/GameOverModal';
 import { WaitingModal } from '../components/modal/WaitingModal';
 import { GiftModal } from '../components/action/GiftModal';
 import { CompetitionModal } from '../components/action/CompetitionModal';
-import type { GameConnection } from '../connection';
 
 interface GameProps {
-  connection: GameConnection;
+  gameState: GameStateType;
+  playerId: PlayerId;
   onLeave: () => void;
 }
 
-export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
-  const { gameState, playerId } = connection;
+export const Game: React.FC<GameProps> = ({ gameState, playerId, onLeave }) => {
+  const socket = useSocket();
   
   // 当前玩家状态
   const currentPlayer = gameState.players[playerId];
@@ -48,6 +49,8 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
 
   // 监听行动要求
   useEffect(() => {
+    if (!socket || !socket.emit) return;
+
     const handleActionRequired = (_type: ActionType, _minCards: number, _maxCards: number) => {
       setSelectedCards([]);
       setCurrentAction(null);
@@ -76,19 +79,20 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
       setCurrentAction(null);
     };
 
-    const unsubscribers = [
-      connection.on('actionRequired', handleActionRequired),
-      connection.on('choiceRequired', handleChoiceRequired),
-      connection.on('gameOver', handleGameOver),
-      connection.on('phaseChanged', handlePhaseChanged),
-    ];
+    socket.on('actionRequired', handleActionRequired);
+    socket.on('choiceRequired', handleChoiceRequired);
+    socket.on('gameOver', handleGameOver);
+    socket.on('phaseChanged', handlePhaseChanged);
 
     return () => {
-      unsubscribers.forEach(unsubscribe => unsubscribe());
+      socket.off('actionRequired', handleActionRequired);
+      socket.off('choiceRequired', handleChoiceRequired);
+      socket.off('gameOver', handleGameOver);
+      socket.off('phaseChanged', handlePhaseChanged);
     };
-  }, [connection, playerId]);
+  }, [socket, playerId]);
 
-  // 以服务端状态为准打开/关闭选择弹窗，避免遗漏一次性连接事件。
+  // 以服务端状态为准打开/关闭选择弹窗，避免遗漏一次性 socket 事件。
   useEffect(() => {
     const pending = gameState.pendingAction;
     setShowGift(pending?.type === 'gift' && pending.chooser === playerId);
@@ -128,6 +132,7 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
 
   // 确认执行行动
   const handleConfirmAction = useCallback(() => {
+    if (!socket || !socket.emit) return;
     if (!currentAction || selectedCards.length === 0) return;
 
     const cardCount = ACTION_CONFIG[currentAction].cardCount;
@@ -140,14 +145,14 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
       return;
     }
 
-    connection.sendPlayAction({
+    socket.emit('playAction', {
       type: currentAction,
       cardIds: selectedCards,
     });
 
     setCurrentAction(null);
     setSelectedCards([]);
-  }, [connection, currentAction, selectedCards]);
+  }, [socket, currentAction, selectedCards]);
 
   // 取消行动
   const handleCancelAction = useCallback(() => {
@@ -157,20 +162,23 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
 
   // 抽牌
   const handleDrawCard = useCallback(() => {
+    if (!socket || !socket.emit) return;
     if (!isMyTurn) return;
-    connection.sendDrawCard();
-  }, [connection, isMyTurn]);
+    socket.emit('drawCard');
+  }, [socket, isMyTurn]);
 
   // 处理赠予选择完成
   const handleGiftComplete = useCallback((selectedIndex: number) => {
-    connection.sendResolveAction(selectedIndex);
+    if (!socket || !socket.emit) return;
+    socket.emit('resolveAction', selectedIndex);
     setShowGift(false);
-  }, [connection]);
+  }, [socket]);
 
   // 处理竞争分组完成
   const handleCompetitionComplete = useCallback((grouping: string[][]) => {
+    if (!socket || !socket.emit) return;
     if (selectedCards.length !== 4) return;
-    connection.sendPlayAction({
+    socket.emit('playAction', {
       type: 'competition',
       cardIds: selectedCards,
       grouping,
@@ -178,20 +186,21 @@ export const Game: React.FC<GameProps> = ({ connection, onLeave }) => {
     setShowCompetition(false);
     setCurrentAction(null);
     setSelectedCards([]);
-  }, [connection, selectedCards]);
+  }, [socket, selectedCards]);
 
   // 处理竞争选择完成（作为选择者）
   const handleCompetitionSelect = useCallback((selectedIndex: number) => {
-    connection.sendResolveAction(selectedIndex);
+    if (!socket || !socket.emit) return;
+    socket.emit('resolveAction', selectedIndex);
     setShowCompetition(false);
-  }, [connection]);
+  }, [socket]);
 
   // 关闭游戏结束弹窗
   const handleCloseGameOver = useCallback(() => {
     setShowGameOver(false);
-    connection.leaveRoom();
+    socket?.emit('leaveRoom');
     onLeave();
-  }, [connection, onLeave]);
+  }, [socket, onLeave]);
 
   // 获取当前阶段显示名称
   const getPhaseDisplayName = () => {

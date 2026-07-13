@@ -71,43 +71,6 @@ VITE_API_BASE_URL=https://api.example.com
 2. 不要只写 IP，正式环境建议必须用 HTTPS 域名。
 3. 不要在末尾加 `/`，例如推荐 `https://api.example.com`，不是 `https://api.example.com/`。
 
-
-### 只想先部署前端、测试离线 P2P
-
-如果你还没有部署后端，也可以先把前端部署到 Cloudflare Pages。此时：
-
-1. 在线服务器模式不能创建/加入房间，因为它必须连接后端 Socket.IO 服务。
-2. relay 一次扫码也不能使用，因为 relay API `/api/p2p/*` 在后端。
-3. 仍然可以测试“纯离线 P2P 兜底”：Host 新建离线房间后，把 invite 链接/文本发给 Player；Player 生成 answer 后，再复制回 Host 当前页面粘贴导入。
-4. 新版大厅在生产环境未检测到 `VITE_SOCKET_URL` / `VITE_API_BASE_URL` 时，会默认显示“离线 P2P 模式（前端-only 可测）”，并在在线模式里提示为什么按钮不可用。
-
-这不是 bug，而是前端-only 部署的边界：静态网页可以运行 UI 和浏览器 WebRTC，但在线匹配、房间管理和 relay signaling 都需要后端。
-
----
-
-## 1.1 离线 P2P / signaling relay 边界
-
-离线 P2P 的 signaling relay 只负责临时交换 WebRTC 连接信息（Host offer / Player answer）。它不保存手牌、`EngineState`、`eventLog` 或任何游戏动作；连接建立后，对局消息通过两台设备之间的 WebRTC DataChannel 传输。
-
-relay signaling 不等于公网穿透。当前 MVP 优先支持两台设备在同一 Wi-Fi 或同一个手机热点下连接；跨运营商网络、公司/校园网、对称 NAT 等场景可能需要额外的 STUN/TURN 服务。
-
-前端可通过 `VITE_P2P_ICE_SERVERS` 配置 ICE servers：
-
-```env
-# JSON 写法，支持 STUN + TURN
-VITE_P2P_ICE_SERVERS=[{"urls":"stun:stun.example.com:3478"},{"urls":"turn:turn.example.com:3478","username":"user","credential":"pass"}]
-
-# 或逗号分隔写法，适合只配置 STUN
-VITE_P2P_ICE_SERVERS=stun:stun1.example.com:3478,stun:stun2.example.com:3478
-```
-
-部署注意：
-
-1. 不要把第三方 TURN 用户名、密码硬编码到源码里，应使用 Cloudflare Pages / Vite 环境变量。
-2. 当前 MVP 不承诺跨公网必连；relay 只能降低 offer/answer 交换成本，不能代替 TURN。
-3. 当前纯离线兜底仍是 Host 当前页面粘贴 Player answer；没有实现 Host 摄像头扫码导入 answer。
-4. 当前断线后需要重新交换 offer/answer；完整断线扫码恢复不是当前 MVP 承诺。
-
 ---
 
 ## 2. Cloudflare Pages 前端部署配置

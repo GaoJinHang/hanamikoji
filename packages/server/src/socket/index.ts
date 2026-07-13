@@ -21,7 +21,7 @@ import { createGameSetup, type EngineAction, type EngineState } from '@hanamikoj
 import { GameRoom } from '../game/GameRoom';
 import type { RoomCtx, StoredRoomPlayer } from '../game/RoomStore';
 import { RoomStore } from '../game/RoomStore';
-import { createPlayerView } from '@hanamikoji/shared';
+import { createPlayerView } from '../game/playerView';
 import { validateJoinRoom, validatePlayAction, validateResolveAction, validateResumeGame } from './validation';
 
 const roomStore = new RoomStore();
